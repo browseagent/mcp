@@ -144,6 +144,15 @@ export class MCPServer extends EventEmitter {
             result = await this.handleInitialize(params);
             break;
             
+          case 'notifications/initialized':
+            await this.handleInitializedNotification(params);
+            // Notifications don't return results
+            return;
+            
+          case 'notifications/cancelled':
+            await this.handleCancelledNotification(params);
+            return;
+            
           case 'tools/list':
             result = await this.handleToolsList();
             break;
@@ -218,6 +227,36 @@ export class MCPServer extends EventEmitter {
         clientInfo: this.clientInfo
       });
     }
+  }
+
+  async handleInitializedNotification(params) {
+    this.logger.info('Client initialization complete');
+    
+    // Emit event for notification handlers
+    this.emit('client-initialized', {
+      clientInfo: this.clientInfo,
+      timestamp: Date.now()
+    });
+  }
+
+  async handleCancelledNotification(params) {
+    this.logger.debug('Request cancelled by client:', params);
+    
+    // Handle request cancellation if needed
+    const { requestId, reason } = params;
+    
+    // Remove from pending requests if we're tracking them
+    if (this.pendingRequests.has(requestId)) {
+      this.pendingRequests.delete(requestId);
+      this.logger.debug(`Cancelled pending request: ${requestId}`);
+    }
+    
+    this.emit('request-cancelled', {
+      requestId,
+      reason,
+      clientInfo: this.clientInfo,
+      timestamp: Date.now()
+    });
   }
 
   async handleInitialize(params) {
@@ -514,7 +553,7 @@ export class MCPServer extends EventEmitter {
       message &&
       typeof message === 'object' &&
       message.jsonrpc === '2.0' &&
-      (message.method || message.result !== undefined || message.error)
+      (message.method || message.result !== undefined || message.error !== undefined)
     );
   }
 

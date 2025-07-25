@@ -1,8 +1,8 @@
 /**
- * STDIO Transport for Native Messaging
+ * STDIO Transport for MCP Protocol
  * 
- * Implements the Chrome Native Messaging protocol using stdin/stdout.
- * This is the primary communication channel with MCP clients.
+ * Implements JSON-RPC over STDIO for MCP clients.
+ * Claude Desktop uses JSON-RPC format, not Chrome Native Messaging format.
  */
 
 import { EventEmitter } from 'events';
@@ -13,8 +13,8 @@ export class StdioTransport extends EventEmitter {
     super();
     
     this.logger = options.logger;
-    this.messageBuffer = Buffer.alloc(0);
     this.isStarted = false;
+    this.inputBuffer = '';
     
     // Bind methods
     this.handleStdinData = this.handleStdinData.bind(this);
@@ -27,10 +27,10 @@ export class StdioTransport extends EventEmitter {
       return;
     }
     
-    this.logger.debug('Starting STDIO transport...');
+    this.logger.debug('Starting STDIO transport (JSON-RPC format)...');
     
-    // Configure stdin
-    process.stdin.setEncoding(null); // Keep as buffer
+    // Configure stdin for JSON-RPC (line-based) communication
+    process.stdin.setEncoding('utf8'); // Use UTF-8 encoding for JSON-RPC
     process.stdin.on('data', this.handleStdinData);
     process.stdin.on('end', this.handleStdinEnd);
     process.stdin.on('error', this.handleStdinError);
@@ -42,7 +42,7 @@ export class StdioTransport extends EventEmitter {
     });
     
     this.isStarted = true;
-    this.logger.debug('STDIO transport started');
+    this.logger.debug('STDIO transport started (JSON-RPC mode)');
   }
 
   async stop() {
@@ -69,19 +69,14 @@ export class StdioTransport extends EventEmitter {
     }
     
     try {
+      // JSON-RPC format: serialize as JSON and add newline
       const messageStr = JSON.stringify(message);
-      const messageBuffer = Buffer.from(messageStr, 'utf8');
-      const lengthBuffer = Buffer.allocUnsafe(4);
-      
-      // Write message length as 32-bit unsigned integer (little-endian)
-      lengthBuffer.writeUInt32LE(messageBuffer.length, 0);
       
       this.logger.debug('Sending message:', message);
-      this.logger.debug(`Message length: ${messageBuffer.length} bytes`);
+      this.logger.debug(`Message length: ${messageStr.length} characters`);
       
-      // Write length header + message
-      process.stdout.write(lengthBuffer);
-      process.stdout.write(messageBuffer);
+      // Write JSON message followed by newline
+      process.stdout.write(messageStr + '\n');
       
     } catch (error) {
       this.logger.error('Failed to send message:', error);
@@ -92,41 +87,22 @@ export class StdioTransport extends EventEmitter {
 
   handleStdinData(chunk) {
     try {
-      // Append new data to buffer
-      this.messageBuffer = Buffer.concat([this.messageBuffer, chunk]);
+      // Add chunk to input buffer
+      this.inputBuffer += chunk;
       
-      // Process complete messages
-      while (this.messageBuffer.length >= 4) {
-        // Read message length (first 4 bytes, little-endian)
-        const messageLength = this.messageBuffer.readUInt32LE(0);
-        
-        this.logger.debug(`Expected message length: ${messageLength} bytes`);
-        
-        // Check if we have the complete message
-        if (this.messageBuffer.length >= 4 + messageLength) {
-          // Extract message data
-          const messageData = this.messageBuffer.slice(4, 4 + messageLength);
-          
-          // Remove processed message from buffer
-          this.messageBuffer = this.messageBuffer.slice(4 + messageLength);
-          
-          try {
-            // Parse JSON message
-            const messageStr = messageData.toString('utf8');
-            const message = JSON.parse(messageStr);
-            
-            this.logger.debug('Received message:', message);
-            this.emit('message', message);
-            
-          } catch (parseError) {
-            this.logger.error('Failed to parse message:', parseError);
-            this.logger.error('Raw message data:', messageData.toString('utf8'));
-            this.emit('error', new Error(`JSON parse error: ${parseError.message}`));
-          }
-        } else {
-          // Wait for more data
-          this.logger.debug(`Waiting for more data. Have ${this.messageBuffer.length}, need ${4 + messageLength}`);
-          break;
+      this.logger.debug(`Received chunk: ${chunk.length} chars, buffer size: ${this.inputBuffer.length}`);
+      
+      // Process complete lines (JSON-RPC messages are line-delimited)
+      let lines = this.inputBuffer.split('\n');
+      
+      // Keep the last incomplete line in the buffer
+      this.inputBuffer = lines.pop() || '';
+      
+      // Process each complete line
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (trimmedLine) {
+          this.processMessage(trimmedLine);
         }
       }
       
@@ -136,8 +112,34 @@ export class StdioTransport extends EventEmitter {
     }
   }
 
+  processMessage(messageStr) {
+    try {
+      this.logger.debug('Processing message string:', messageStr.slice(0, 200) + (messageStr.length > 200 ? '...' : ''));
+      
+      // Parse JSON message
+      const message = JSON.parse(messageStr);
+      
+      this.logger.debug('Parsed message:', message);
+      this.emit('message', message);
+      
+    } catch (parseError) {
+      this.logger.error('Failed to parse JSON message:', parseError);
+      this.logger.error('Raw message:', messageStr.slice(0, 500));
+      
+      // Don't emit error for malformed messages - just log and continue
+      // This makes the transport more resilient
+      this.logger.warn('Skipping malformed message');
+    }
+  }
+
   handleStdinEnd() {
     this.logger.info('STDIN stream ended');
+    
+    // Process any remaining data in buffer
+    if (this.inputBuffer.trim()) {
+      this.processMessage(this.inputBuffer.trim());
+    }
+    
     this.emit('close');
   }
 
@@ -149,8 +151,9 @@ export class StdioTransport extends EventEmitter {
   getStatus() {
     return {
       type: 'stdio',
+      format: 'json-rpc',
       started: this.isStarted,
-      bufferSize: this.messageBuffer.length
+      bufferSize: this.inputBuffer.length
     };
   }
 }
