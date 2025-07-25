@@ -1,0 +1,63 @@
+{
+  "name": "browseagent-mcp",
+  "version": "1.0.0",
+  "description": "Native messaging host for Browse Agent MCP Server",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --inspect src/index.js",
+    "build": "node scripts/build.js",
+    "install-host": "node scripts/install-host.js",
+    "uninstall-host": "node scripts/uninstall-host.js",
+    "test": "node --test src/test/*.test.js",
+    "lint": "eslint src/ scripts/",
+    "debug": "node --inspect-brk src/index.js"
+  },
+  "bin": {
+    "browser-mcp-host": "./src/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "node-machine-id": "^1.1.12",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "eslint": "^8.54.0",
+    "pkg": "^5.8.1"
+  },
+  "keywords": [
+    "mcp",
+    "browser-automation",
+    "claude-desktop",
+    "native-messaging",
+    "chrome-extension"
+  ],
+  "author": "David Oti",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/browseagent/mcp.git",
+    "directory": "native-host"
+  },
+  "bugs": {
+    "url": "https://github.com/browseagent/mcp/issues"
+  },
+  "homepage": "https://github.com/browseagent/mcp#readme",
+  "pkg": {
+    "scripts": "src/**/*.js",
+    "assets": [
+      "manifests/**/*"
+    ],
+    "targets": [
+      "node18-macos-x64",
+      "node18-macos-arm64",
+      "node18-linux-x64",
+      "node18-win-x64"
+    ]
+  }
+}
