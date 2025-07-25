@@ -122,7 +122,7 @@ function setupExtensionBridge() {
 }
 
 /**
- * Setup MCP server with flexible extension support
+ * Setup MCP server with event handling
  */
 function setupMCPServer() {
   const useStdio = !program.opts().websocket && process.stdin.isTTY === false;
@@ -136,23 +136,104 @@ function setupMCPServer() {
     flexibleMode: true
   });
 
-  // console.log({
-  //   server
-  // });
+  // Handle server lifecycle events
+  server.on('server-started', (info) => {
+    logger.info(chalk.green(`🚀 MCP server started (${info.transport} mode)`));
+    if (info.flexibleMode) {
+      logger.info(chalk.cyan('🔄 Flexible mode enabled - works with or without extension'));
+    }
+  });
 
-  // Handle server events
-  // server.on('client-connected', (clientInfo) => {
-  //   logger.info(chalk.green(`🎯 MCP client connected: ${clientInfo?.name || 'Unknown'}`));
-  // });
+  server.on('server-stopped', () => {
+    logger.info(chalk.yellow('🛑 MCP server stopped'));
+  });
 
-  // server.on('client-disconnected', () => {
-  //   logger.info(chalk.yellow('👋 MCP client disconnected'));
-  // });
+  server.on('server-error', (error) => {
+    logger.error('MCP server error:', error);
+  });
 
-  // server.on('tool-executed', (toolInfo) => {
-  //   const icon = toolInfo.success ? '✅' : '❌';
-  //   logger.info(`${icon} Tool: ${toolInfo.name} (${toolInfo.duration}ms)`);
-  // });
+  // Handle client connection events
+  server.on('client-connected', (clientInfo) => {
+    logger.info(chalk.green(`🎯 MCP client connected: ${clientInfo.clientInfo?.name || 'Unknown'} v${clientInfo.clientInfo?.version || 'Unknown'}`));
+    logger.info(chalk.gray(`   Protocol: ${clientInfo.protocolVersion}`));
+    logger.info(chalk.gray(`   Capabilities: ${Object.keys(clientInfo.capabilities || {}).join(', ') || 'none'}`));
+    
+    if (clientInfo.previousClient) {
+      logger.info(chalk.gray(`   Replaced previous client: ${clientInfo.previousClient.name}`));
+    }
+  });
+
+  server.on('client-disconnected', (info) => {
+    if (info.clientInfo) {
+      logger.info(chalk.yellow(`👋 MCP client disconnected: ${info.clientInfo.name || 'Unknown'}`));
+    } else {
+      logger.info(chalk.yellow('👋 MCP client disconnected'));
+    }
+  });
+
+  // Handle tool execution events
+  server.on('tool-executed', (toolInfo) => {
+    const icon = toolInfo.success ? '✅' : '❌';
+    const extensionStatus = toolInfo.requiresExtension 
+      ? (toolInfo.extensionAvailable ? '🔗' : '🔌') 
+      : '🔧';
+    
+    logger.info(`${icon} ${extensionStatus} Tool: ${toolInfo.name} (${toolInfo.duration}ms)`);
+    
+    if (!toolInfo.success) {
+      logger.debug(`   Error: ${toolInfo.error}`);
+    }
+    
+    if (toolInfo.requiresExtension && !toolInfo.extensionAvailable) {
+      logger.debug('   Note: Tool requires extension but extension not connected');
+    }
+  });
+
+  // Handle method execution events
+  server.on('method-executed', (methodInfo) => {
+    if (methodInfo.method !== 'ping') { // Reduce noise from ping requests
+      const icon = methodInfo.success ? '📥' : '📥❌';
+      logger.debug(`${icon} Method: ${methodInfo.method} (${methodInfo.duration}ms)`);
+      
+      if (!methodInfo.success) {
+        logger.debug(`   Error: ${methodInfo.error}`);
+      }
+    }
+  });
+
+  // Handle extension availability changes
+  server.on('extension-availability-changed', (info) => {
+    if (info.available) {
+      logger.info(chalk.green('🔗 Extension connected - full browser automation available'));
+      if (info.extensionInfo) {
+        logger.info(chalk.gray(`   Extension: ${info.extensionInfo.id} v${info.extensionInfo.version}`));
+      }
+    } else {
+      logger.info(chalk.yellow('🔌 Extension disconnected - limited mode active'));
+    }
+  });
+
+  // Handle tools list requests
+  server.on('tools-listed', (info) => {
+    logger.debug(`📋 Tools listed: ${info.toolCount} tools sent to ${info.clientInfo?.name || 'client'}`);
+  });
+
+  // Handle transport events
+  server.on('transport-error', (error) => {
+    logger.error('Transport error:', error);
+  });
+
+  server.on('transport-closed', () => {
+    logger.info('Transport connection closed');
+  });
+
+  // Handle message errors
+  server.on('message-error', (errorInfo) => {
+    logger.error(`Message processing error: ${errorInfo.error}`);
+    if (errorInfo.message?.method) {
+      logger.debug(`Failed method: ${errorInfo.message.method}`);
+    }
+  });
 
   return server;
 }

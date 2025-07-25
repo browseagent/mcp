@@ -5,6 +5,7 @@
  * Acts as a bridge between MCP client and the browser extension.
  */
 
+import { EventEmitter } from 'events';
 import { StdioTransport } from './transports/StdioTransport.js';
 import { WebSocketTransport } from './transports/WebSocketTransport.js';
 import { MCP_TOOLS } from '../tools/ToolRegistry.js';
@@ -12,16 +13,20 @@ import { Logger } from '../utils/Logger.js';
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 
-export class MCPServer {
+export class MCPServer extends EventEmitter {
   constructor(options = {}) {
+    super(); // Initialize EventEmitter
+    
     this.bridge = options.bridge;
     this.config = options.config;
     this.logger = new Logger('MCPServer');
     this.useStdio = options.useStdio !== false;
+    this.flexibleMode = options.flexibleMode || false;
     
     this.transport = null;
     this.isInitialized = false;
     this.clientInfo = null;
+    this.extensionAvailable = false;
     this.capabilities = {
       tools: {},
       resources: {},
@@ -30,10 +35,12 @@ export class MCPServer {
     
     this.requestId = 0;
     this.pendingRequests = new Map();
+    this.startTime = Date.now();
     
     // Bind methods
     this.handleMessage = this.handleMessage.bind(this);
     this.handleTransportError = this.handleTransportError.bind(this);
+    this.handleTransportClose = this.handleTransportClose.bind(this);
   }
 
   async start() {
@@ -43,29 +50,32 @@ export class MCPServer {
       // Create appropriate transport
       if (this.useStdio) {
         this.transport = new StdioTransport({
-          logger: this.logger
+          logger: this.logger.createChild('STDIO')
         });
       } else {
         this.transport = new WebSocketTransport({
           port: this.config.get('mcp_port', 8766),
-          logger: this.logger
+          logger: this.logger.createChild('WebSocket')
         });
       }
       
       // Set up transport event handlers
       this.transport.on('message', this.handleMessage);
       this.transport.on('error', this.handleTransportError);
-      this.transport.on('close', () => {
-        this.logger.info('Transport connection closed');
-      });
+      this.transport.on('close', this.handleTransportClose);
       
       // Start transport
       await this.transport.start();
       
-      this.logger.info('MCP server started successfully');
+      this.logger.info(`MCP server started successfully (${this.useStdio ? 'STDIO' : 'WebSocket'} mode)`);
+      this.emit('server-started', { 
+        transport: this.useStdio ? 'stdio' : 'websocket',
+        flexibleMode: this.flexibleMode
+      });
       
     } catch (error) {
       this.logger.error('Failed to start MCP server:', error);
+      this.emit('server-error', error);
       throw error;
     }
   }
@@ -74,6 +84,12 @@ export class MCPServer {
     try {
       this.logger.info('Shutting down MCP server...');
       
+      // Emit client disconnection if we had a client
+      if (this.clientInfo) {
+        this.emit('client-disconnected', this.clientInfo);
+        this.clientInfo = null;
+      }
+      
       if (this.transport) {
         await this.transport.stop();
       }
@@ -81,11 +97,28 @@ export class MCPServer {
       // Clear pending requests
       this.pendingRequests.clear();
       
+      this.isInitialized = false;
       this.logger.info('MCP server shut down successfully');
+      this.emit('server-stopped');
       
     } catch (error) {
       this.logger.error('Error during MCP server shutdown:', error);
+      this.emit('server-error', error);
       throw error;
+    }
+  }
+
+  setExtensionAvailable(available, extensionInfo = null) {
+    const wasAvailable = this.extensionAvailable;
+    this.extensionAvailable = available;
+    
+    if (available !== wasAvailable) {
+      this.logger.info(`Extension availability changed: ${available}`);
+      this.emit('extension-availability-changed', { 
+        available, 
+        extensionInfo,
+        timestamp: Date.now()
+      });
     }
   }
 
@@ -103,42 +136,64 @@ export class MCPServer {
       
       // Handle different MCP methods
       let result;
+      const startTime = Date.now();
       
-      switch (method) {
-        case 'initialize':
-          result = await this.handleInitialize(params);
-          break;
-          
-        case 'tools/list':
-          result = await this.handleToolsList();
-          break;
-          
-        case 'tools/call':
-          result = await this.handleToolCall(params);
-          break;
-          
-        case 'resources/list':
-          result = await this.handleResourcesList();
-          break;
-          
-        case 'resources/read':
-          result = await this.handleResourceRead(params);
-          break;
-          
-        case 'prompts/list':
-          result = await this.handlePromptsList();
-          break;
-          
-        case 'prompts/get':
-          result = await this.handlePromptGet(params);
-          break;
-          
-        case 'ping':
-          result = { pong: true, timestamp: Date.now() };
-          break;
-          
-        default:
-          throw new Error(`Unknown method: ${method}`);
+      try {
+        switch (method) {
+          case 'initialize':
+            result = await this.handleInitialize(params);
+            break;
+            
+          case 'tools/list':
+            result = await this.handleToolsList();
+            break;
+            
+          case 'tools/call':
+            result = await this.handleToolCall(params);
+            break;
+            
+          case 'resources/list':
+            result = await this.handleResourcesList();
+            break;
+            
+          case 'resources/read':
+            result = await this.handleResourceRead(params);
+            break;
+            
+          case 'prompts/list':
+            result = await this.handlePromptsList();
+            break;
+            
+          case 'prompts/get':
+            result = await this.handlePromptGet(params);
+            break;
+            
+          case 'ping':
+            result = { pong: true, timestamp: Date.now() };
+            break;
+            
+          default:
+            throw new Error(`Unknown method: ${method}`);
+        }
+        
+        const duration = Date.now() - startTime;
+        this.emit('method-executed', {
+          method,
+          success: true,
+          duration,
+          clientInfo: this.clientInfo
+        });
+        
+      } catch (methodError) {
+        const duration = Date.now() - startTime;
+        this.emit('method-executed', {
+          method,
+          success: false,
+          duration,
+          error: methodError.message,
+          clientInfo: this.clientInfo
+        });
+        throw methodError;
       }
       
       // Send response
@@ -156,14 +211,30 @@ export class MCPServer {
           data: error.stack
         });
       }
+      
+      this.emit('message-error', {
+        error: error.message,
+        message,
+        clientInfo: this.clientInfo
+      });
     }
   }
 
   async handleInitialize(params) {
     this.logger.info('Handling initialize request');
     
+    const previousClientInfo = this.clientInfo;
     this.clientInfo = params.clientInfo;
     this.isInitialized = true;
+    
+    // Emit client connected event
+    this.emit('client-connected', {
+      clientInfo: this.clientInfo,
+      protocolVersion: params.protocolVersion,
+      capabilities: params.capabilities,
+      previousClient: previousClientInfo,
+      timestamp: Date.now()
+    });
     
     this.logger.info(`Initialized with client: ${this.clientInfo?.name || 'Unknown'} v${this.clientInfo?.version || 'Unknown'}`);
     
@@ -187,6 +258,12 @@ export class MCPServer {
       inputSchema: tool.inputSchema
     }));
     
+    this.emit('tools-listed', {
+      toolCount: tools.length,
+      clientInfo: this.clientInfo,
+      timestamp: Date.now()
+    });
+    
     return { tools };
   }
 
@@ -198,7 +275,16 @@ export class MCPServer {
     
     // Validate tool exists
     if (!MCP_TOOLS[name]) {
-      throw new Error(`Unknown tool: ${name}`);
+      const error = new Error(`Unknown tool: ${name}`);
+      this.emit('tool-executed', {
+        name,
+        success: false,
+        error: error.message,
+        duration: 0,
+        clientInfo: this.clientInfo,
+        timestamp: Date.now()
+      });
+      throw error;
     }
     
     // Validate arguments
@@ -206,20 +292,114 @@ export class MCPServer {
     this.validateToolArguments(tool, args);
     
     try {
-      // Execute tool via extension bridge
       const startTime = Date.now();
-      const result = await this.bridge.executeTool(name, args);
+      
+      // Check if tool requires extension and if extension is available
+      const requiresExtension = this.toolRequiresExtension(name);
+      if (requiresExtension && !this.extensionAvailable && !this.flexibleMode) {
+        throw new Error(`Tool ${name} requires Chrome extension, but extension is not connected`);
+      }
+      
+      let result;
+      
+      if (requiresExtension && this.extensionAvailable) {
+        // Execute tool via extension bridge
+        result = await this.bridge.executeTool(name, args);
+      } else if (!requiresExtension) {
+        // Execute limited mode tool locally
+        result = await this.executeLocalTool(name, args);
+      } else if (this.flexibleMode) {
+        // In flexible mode, provide helpful error message
+        result = {
+          content: [{
+            type: "text",
+            text: `Tool "${name}" requires Chrome extension connection. Please install and connect the BrowseAgent Chrome extension to use browser automation features.`
+          }]
+        };
+      } else {
+        throw new Error(`Tool ${name} is not available in current mode`);
+      }
+      
       const duration = Date.now() - startTime;
       
       this.logger.info(`Tool ${name} executed successfully in ${duration}ms`);
       this.logger.debug('Tool result:', result);
       
+      // Emit tool execution event
+      this.emit('tool-executed', {
+        name,
+        success: true,
+        duration,
+        requiresExtension,
+        extensionAvailable: this.extensionAvailable,
+        clientInfo: this.clientInfo,
+        timestamp: Date.now()
+      });
+      
       // Format result according to MCP specification
       return this.formatToolResult(result);
       
     } catch (error) {
+      const duration = Date.now() - Date.now(); // This will be 0 for immediate errors
+      
       this.logger.error(`Tool ${name} execution failed:`, error);
+      
+      this.emit('tool-executed', {
+        name,
+        success: false,
+        duration,
+        error: error.message,
+        requiresExtension: this.toolRequiresExtension(name),
+        extensionAvailable: this.extensionAvailable,
+        clientInfo: this.clientInfo,
+        timestamp: Date.now()
+      });
+      
       throw new Error(`Tool execution failed: ${error.message}`);
+    }
+  }
+
+  toolRequiresExtension(toolName) {
+    const localTools = ['browser_wait', 'ping', 'system_info'];
+    return !localTools.includes(toolName);
+  }
+
+  async executeLocalTool(toolName, args) {
+    switch (toolName) {
+      case 'browser_wait':
+        const waitTime = args.time * 1000; // Convert to milliseconds
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return {
+          content: [{
+            type: "text",
+            text: `Waited for ${args.time} seconds`
+          }]
+        };
+        
+      case 'ping':
+        return {
+          content: [{
+            type: "text",
+            text: `Pong! Server uptime: ${Math.round((Date.now() - this.startTime) / 1000)}s`
+          }]
+        };
+        
+      case 'system_info':
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              platform: process.platform,
+              nodeVersion: process.version,
+              uptime: process.uptime(),
+              memory: process.memoryUsage(),
+              extensionConnected: this.extensionAvailable
+            }, null, 2)
+          }]
+        };
+        
+      default:
+        throw new Error(`Local tool not implemented: ${toolName}`);
     }
   }
 
@@ -311,6 +491,22 @@ export class MCPServer {
 
   handleTransportError(error) {
     this.logger.error('Transport error:', error);
+    this.emit('transport-error', error);
+  }
+
+  handleTransportClose() {
+    this.logger.info('Transport connection closed');
+    
+    if (this.clientInfo) {
+      this.emit('client-disconnected', {
+        clientInfo: this.clientInfo,
+        timestamp: Date.now()
+      });
+      this.clientInfo = null;
+    }
+    
+    this.isInitialized = false;
+    this.emit('transport-closed');
   }
 
   isValidMCPMessage(message) {
@@ -405,8 +601,12 @@ export class MCPServer {
     return {
       initialized: this.isInitialized,
       client: this.clientInfo?.name || null,
+      clientConnected: !!this.clientInfo,
       transport: this.transport?.getStatus() || 'not-started',
-      pendingRequests: this.pendingRequests.size
+      pendingRequests: this.pendingRequests.size,
+      extensionAvailable: this.extensionAvailable,
+      flexibleMode: this.flexibleMode,
+      uptime: Date.now() - this.startTime
     };
   }
 }
