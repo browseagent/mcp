@@ -127,7 +127,7 @@ function setupExtensionBridge() {
 function setupMCPServer() {
   const useStdio = !program.opts().websocket && process.stdin.isTTY === false;
   
-  server = createServer({
+  const server = createServer({
     bridge,
     config,
     logger: logger.createChild('MCP'),
@@ -136,19 +136,23 @@ function setupMCPServer() {
     flexibleMode: true
   });
 
+  // console.log({
+  //   server
+  // });
+
   // Handle server events
-  server.on('client-connected', (clientInfo) => {
-    logger.info(chalk.green(`🎯 MCP client connected: ${clientInfo?.name || 'Unknown'}`));
-  });
+  // server.on('client-connected', (clientInfo) => {
+  //   logger.info(chalk.green(`🎯 MCP client connected: ${clientInfo?.name || 'Unknown'}`));
+  // });
 
-  server.on('client-disconnected', () => {
-    logger.info(chalk.yellow('👋 MCP client disconnected'));
-  });
+  // server.on('client-disconnected', () => {
+  //   logger.info(chalk.yellow('👋 MCP client disconnected'));
+  // });
 
-  server.on('tool-executed', (toolInfo) => {
-    const icon = toolInfo.success ? '✅' : '❌';
-    logger.info(`${icon} Tool: ${toolInfo.name} (${toolInfo.duration}ms)`);
-  });
+  // server.on('tool-executed', (toolInfo) => {
+  //   const icon = toolInfo.success ? '✅' : '❌';
+  //   logger.info(`${icon} Tool: ${toolInfo.name} (${toolInfo.duration}ms)`);
+  // });
 
   return server;
 }
@@ -209,7 +213,7 @@ async function main() {
 
     // Initialize MCP server
     logger.info('🔧 Initializing MCP server...');
-    setupMCPServer();
+    const server = setupMCPServer();
     await server.start();
     logger.info('✅ MCP server ready');
 
