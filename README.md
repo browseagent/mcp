@@ -166,7 +166,7 @@ Open the extension popup to:
 
 ## 🏗️ Development
 
-### Local Development
+### Local Development Setup
 
 ```bash
 # Clone the repository
@@ -176,11 +176,75 @@ cd mcp
 # Install dependencies
 npm install
 
-# Run in development mode
+# Create global symlink for development
+npm link
+
+# Test the server
+npm run test
+```
+
+### Testing with Claude Desktop (Development)
+
+For local development and testing with Claude Desktop:
+
+```bash
+# 1. Create global link (one time setup)
+npm link
+
+# 2. Configure Claude Desktop to use your local version
+```
+
+Add to your Claude Desktop MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "browseagent-dev": {
+      "command": "npx",
+      "args": ["@browseagent/mcp", "--debug"]
+    }
+  }
+}
+```
+
+**Development Workflow:**
+
+1. **Make changes** to your code
+2. **Test locally**: `npm test`
+3. **Test with Claude Desktop**: Restart Claude Desktop to reload the linked package
+4. **Iterate** and repeat
+
+### Alternative: Direct Path Development
+
+For more direct control during development:
+
+```json
+{
+  "mcpServers": {
+    "browseagent-dev": {
+      "command": "node",
+      "args": ["/absolute/path/to/your/project/src/index.js", "--debug"],
+      "cwd": "/absolute/path/to/your/project"
+    }
+  }
+}
+```
+
+### Running in Development Mode
+
+```bash
+# Run with debugging enabled
 npm run dev
 
-# Run with debugging
-npm run dev -- --debug --websocket
+# Run with WebSocket mode for extension testing
+npm run dev -- --websocket
+
+# Run tests
+npm test
+
+# Run specific tests
+npm run test:connection
+npm run test:tools
 ```
 
 ### Building from Source
@@ -196,7 +260,7 @@ node src/index.js --debug
 ### Testing
 
 ```bash
-# Run test suite
+# Run full test suite
 npm test
 
 # Test connection
@@ -204,6 +268,9 @@ npm run test:connection
 
 # Test specific tools
 npm run test:tools
+
+# Manual MCP protocol test
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node src/index.js
 ```
 
 ## 🤝 Contributing
@@ -212,23 +279,39 @@ We welcome contributions! Here's how to get started:
 
 1. **Fork the repository**
 2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Commit changes**: `git commit -m 'Add amazing feature'`
-4. **Push to branch**: `git push origin feature/amazing-feature`
-5. **Open a Pull Request**
+3. **Set up development environment**: `npm install && npm link`
+4. **Make your changes and test**: `npm test`
+5. **Test with Claude Desktop** using the development configuration
+6. **Commit changes**: `git commit -m 'Add amazing feature'`
+7. **Push to branch**: `git push origin feature/amazing-feature`
+8. **Open a Pull Request**
 
 ### Development Setup
 
 ```bash
 # Clone your fork
-git clone https://github.com/browseagent/mcp.git
+git clone https://github.com/your-username/browseagent-mcp.git
 cd browseagent-mcp
 
 # Install dependencies
 npm install
 
+# Create development link
+npm link
+
 # Install the Chrome extension in development mode
 npm run build:extension
+
+# Test your changes
+npm test
 ```
+
+### Development Tools
+
+- **ESLint**: `npm run lint`
+- **Tests**: `npm test`
+- **Debug mode**: `npm run dev -- --debug`
+- **WebSocket mode**: `npm run dev -- --websocket`
 
 ## 📝 API Reference
 
@@ -266,7 +349,7 @@ src/
 
 ```
 
-## 📚 Documentation //TODO
+## 📚 Documentation
 
 - 📖 [API Reference](./docs/api.md) 
 - 🔧 [Configuration Guide](./docs/configuration.md)
