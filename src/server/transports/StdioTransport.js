@@ -2,7 +2,7 @@
  * STDIO Transport for Native Messaging
  * 
  * Implements the Chrome Native Messaging protocol using stdin/stdout.
- * This is the primary communication channel with Claude Desktop.
+ * This is the primary communication channel with MCP clients.
  */
 
 import { EventEmitter } from 'events';

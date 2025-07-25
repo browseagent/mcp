@@ -13,6 +13,10 @@ export class ExtensionBridge extends EventEmitter {
   constructor(options = {}) {
     super();
     
+    this.registeredExtensions = new Set(); // Track connected extensions
+    this.extensionManifests = new Map();   // Store extension manifests
+    this.activeExtensionId = null;         // Currently active extension
+
     this.port = options.port || 8765;
     this.debug = options.debug || false;
     this.useWebSocket = options.useWebSocket || false;
@@ -147,6 +151,103 @@ export class ExtensionBridge extends EventEmitter {
     this.emit('extension-connected');
   }
 
+
+  async handleExtensionHandshake(message) {
+    const { extensionId, version, timestamp, capabilities } = message;
+    
+    this.logger.info(`Handshake received from extension: ${extensionId}`);
+    
+    try {
+      // Register this extension
+      this.registeredExtensions.add(extensionId);
+      this.activeExtensionId = extensionId;
+      
+      // Store extension info
+      this.extensionManifests.set(extensionId, {
+        id: extensionId,
+        version,
+        capabilities,
+        connectedAt: timestamp,
+        lastSeen: Date.now()
+      });
+      
+      // Create/update native messaging manifest for this extension
+      await this.createNativeManifestForExtension(extensionId);
+      
+      // Send handshake response
+      this.sendMessage({
+        type: 'handshake-response',
+        success: true,
+        message: 'Connected to BrowseAgent MCP Server',
+        timestamp: Date.now(),
+        serverInfo: {
+          name: 'browseagent-mcp',
+          version: '1.0.0',
+          capabilities: {
+            browserAutomation: true,
+            mcpProtocol: true
+          }
+        }
+      });
+      
+      this.logger.info(`✅ Extension ${extensionId} connected successfully`);
+      this.emit('extension-registered', { extensionId, version });
+      
+    } catch (error) {
+      this.logger.error('Failed to handle extension handshake:', error);
+      
+      this.sendMessage({
+        type: 'connection-error',
+        error: error.message,
+        timestamp: Date.now()
+      });
+    }
+  }
+
+
+  async createNativeManifestForExtension(extensionId) {
+    try {
+      const manifestDir = this.getNativeManifestDirectory();
+      await mkdir(manifestDir, { recursive: true });
+      
+      const manifest = {
+        name: 'com.browseagent.mcp',
+        description: 'BrowseAgent MCP Native Host',
+        path: process.argv[1], // Current script path
+        type: 'stdio',
+        allowed_origins: [
+          `chrome-extension://${extensionId}/`
+        ]
+      };
+      
+      const manifestPath = join(manifestDir, 'com.browseagent.mcp.json');
+      await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+      
+      this.logger.info(`Native manifest created for extension: ${extensionId}`);
+      this.logger.debug(`Manifest path: ${manifestPath}`);
+      
+    } catch (error) {
+      this.logger.error('Failed to create native manifest:', error);
+      throw error;
+    }
+  }
+
+  getNativeManifestDirectory() {
+    const home = homedir();
+    
+    switch (process.platform) {
+      case 'win32':
+        return join(home, 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'NativeMessagingHosts');
+      case 'darwin':
+        return join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts');
+      case 'linux':
+        return join(home, '.config', 'google-chrome', 'NativeMessagingHosts');
+      default:
+        throw new Error(`Unsupported platform: ${process.platform}`);
+    }
+  }
+
+
   handleMessage(data) {
     try {
       const message = JSON.parse(data.toString('utf8'));
@@ -155,6 +256,14 @@ export class ExtensionBridge extends EventEmitter {
       this.lastHeartbeat = Date.now();
       
       switch (message.type) {
+        case 'handshake':
+          this.handleExtensionHandshake(message);
+          break;
+          
+        case 'disconnect':
+          this.handleExtensionDisconnect(message);
+          break;
+
         case 'tool-response':
           this.handleToolResponse(message);
           break;
@@ -178,6 +287,50 @@ export class ExtensionBridge extends EventEmitter {
     } catch (error) {
       this.logger.error('Failed to parse extension message:', error);
     }
+  }
+
+  handleExtensionDisconnect(message) {
+    const { extensionId } = message;
+    
+    if (extensionId && this.registeredExtensions.has(extensionId)) {
+      this.registeredExtensions.delete(extensionId);
+      this.extensionManifests.delete(extensionId);
+      
+      if (this.activeExtensionId === extensionId) {
+        this.activeExtensionId = null;
+      }
+      
+      this.logger.info(`Extension ${extensionId} disconnected`);
+      this.emit('extension-disconnected', { extensionId });
+    }
+  }
+
+  getConnectionStatus() {
+    return {
+      initialized: this.isInitialized,
+      extensionsConnected: this.registeredExtensions.size,
+      activeExtension: this.activeExtensionId,
+      registeredExtensions: Array.from(this.registeredExtensions),
+      lastHeartbeat: this.lastHeartbeat,
+      uptime: Date.now() - this.startTime
+    };
+  }
+
+   async waitForExtensionConnection(timeout = 30000) {
+    if (this.registeredExtensions.size > 0) {
+      return Array.from(this.registeredExtensions)[0];
+    }
+    
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Extension connection timeout'));
+      }, timeout);
+      
+      this.once('extension-registered', ({ extensionId }) => {
+        clearTimeout(timeoutId);
+        resolve(extensionId);
+      });
+    });
   }
 
   handleDisconnection(code, reason) {
@@ -330,4 +483,6 @@ export class ExtensionBridge extends EventEmitter {
     // This would be handled by the calling MCP server
     return response;
   }
+  
+  
 }

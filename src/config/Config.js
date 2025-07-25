@@ -37,6 +37,7 @@ export class Config {
       
       // Server configuration
       port: 8765,
+      mcp_port: 8766,
       host: '127.0.0.1',
       timeout: 30000,
       

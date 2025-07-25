@@ -1,8 +1,8 @@
 /**
  * MCP (Model Context Protocol) Server Implementation
  * 
- * Handles communication with Claude Desktop and implements the MCP specification.
- * Acts as a bridge between Claude Desktop and the browser extension.
+ * Handles communication with MCP client and implements the MCP specification.
+ * Acts as a bridge between MCP client and the browser extension.
  */
 
 import { StdioTransport } from './transports/StdioTransport.js';
@@ -47,7 +47,7 @@ export class MCPServer {
         });
       } else {
         this.transport = new WebSocketTransport({
-          port: this.config.get('port', 8765),
+          port: this.config.get('mcp_port', 8766),
           logger: this.logger
         });
       }
@@ -171,9 +171,9 @@ export class MCPServer {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: this.capabilities,
       serverInfo: {
-        name: "browser-mcp-server",
+        name: "browseagent-mcp",
         version: "1.0.0",
-        description: "Browser automation MCP server for Claude Desktop"
+        description: "Browser automation MCP server for MCP clients"
       }
     };
   }
