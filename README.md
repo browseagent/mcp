@@ -12,7 +12,6 @@
 - 📸 **Screenshots & Analysis** - Capture and analyze web pages visually  
 - 🎯 **Smart Element Detection** - AI-powered element identification and interaction
 - 🔄 **Real-time Automation** - Dynamic connection with Chrome extension
-- 🛡️ **Secure Communication** - Native messaging protocol for safe browser access
 - ⚡ **Zero Configuration** - Works out of the box with Claude, Cursor, Windsurf, VSCode, Aider, Zed Editor and other MCP compatiple clients.
 
 ## 🚀 Quick Start
@@ -159,7 +158,6 @@ Open the extension popup to:
 ## 🔒 Security & Privacy
 
 - ✅ **Local Communication** - All data stays on your machine
-- ✅ **Secure Protocol** - Uses Chrome's native messaging API
 - ✅ **No Data Collection** - We don't store or transmit your browsing data
 - ✅ **Permission Based** - Extension only accesses tabs when explicitly used
 - ✅ **Open Source** - Full transparency in code and operations
@@ -269,7 +267,7 @@ npm run test:connection
 ```
 
 **What it tests:**
-- ✅ Native host startup and initialization
+- ✅ Server startup and initialization
 - ✅ WebSocket server creation and binding
 - ✅ Extension bridge protocol handshake
 - ✅ Architecture validation (STDIO vs WebSocket separation)
@@ -435,9 +433,9 @@ nodemon src/index.js -- --websocket --debug
 ```
 🧪 BrowseAgent MCP Connection Tests
 
-📋 Testing: Native Host Startup...
+📋 Testing: Server Startup...
    ✓ Process started successfully
-✅ Native Host Startup: PASSED
+✅ Server Startup: PASSED
 
 📋 Testing: WebSocket Connection...
    ✓ WebSocket connected
@@ -557,7 +555,7 @@ This server implements the [Model Context Protocol](https://modelcontextprotocol
 
 - **Protocol Version**: `2024-11-05`
 - **Capabilities**: Tools
-- **Transport**: stdio (native messaging)
+- **Transport**: stdio
 
 ### Tool Schemas
 
