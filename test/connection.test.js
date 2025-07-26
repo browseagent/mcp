@@ -26,7 +26,7 @@ class ConnectionTester {
     console.log(chalk.blue.bold('🧪 BrowseAgent MCP Connection Tests\n'));
 
     const tests = [
-      { name: 'Native Host Startup', fn: () => this.testNativeHostStartup() },
+      { name: 'Server Startup', fn: () => this.testNativeHostStartup() },
       { name: 'WebSocket Connection', fn: () => this.testWebSocketConnection() },
       { name: 'Extension Bridge Protocol', fn: () => this.testExtensionBridge() },
       { name: 'Architecture Verification', fn: () => this.testArchitectureVerification() }
@@ -73,7 +73,7 @@ class ConnectionTester {
   }
 
   async testNativeHostStartup() {
-    console.log(chalk.gray('   Starting native host process...'));
+    console.log(chalk.gray('   Starting server process...'));
 
     return new Promise((resolve, reject) => {
       this.nativeHostProcess = spawn('node', ['src/index.js', '--websocket', '--debug'], {
@@ -115,7 +115,7 @@ class ConnectionTester {
         if (resolved) return;
         
         const successIndicators = [
-          'BrowseAgent Native Host',
+          'BrowseAgent MCP',
           'Extension bridge ready',
           'MCP server ready',
           'is running',
