@@ -587,9 +587,6 @@ src/
 
 - 📖 [API Reference](./docs/api.md) 
 - 🔧 [Configuration Guide](./docs/configuration.md)
-- 🚀 [Advanced Usage](./docs/advanced.md)
-- 🐛 [Troubleshooting Guide](./docs/troubleshooting.md)
-- 🤝 [Contributing Guide](./CONTRIBUTING.md)
 
 ## 🆘 Support
 
