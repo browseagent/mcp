@@ -13,19 +13,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export class Config {
-  constructor(configPath = null) {
-    this.configPath = configPath || this.getDefaultConfigPath();
+  constructor() {
     this.config = this.getDefaultConfig();
-    this.loaded = false;
-  }
-
-  getDefaultConfigPath() {
-    // Use platform-specific config directory
-    const configDir = process.platform === 'win32' 
-      ? join(homedir(), 'AppData', 'Local', 'BrowseAgent')
-      : join(homedir(), '.config', 'browse-agent');
-    
-    return join(configDir, 'config.json');
   }
 
   getDefaultConfig() {
@@ -54,7 +43,9 @@ export class Config {
       
       // Security
       allowedOrigins: [
-        'chrome-extension://*'
+        'chrome-extension://*',
+        'ws://localhost:*',
+        'wss://localhost:*'
       ],
       maxMessageSize: 10485760, // 10MB
       
@@ -76,49 +67,6 @@ export class Config {
       nodeEnv: process.env.NODE_ENV || 'production',
       version: '1.0.0'
     };
-  }
-
-  async load() {
-    try {
-      // Check if config file exists
-      await access(this.configPath);
-      
-      // Read and parse config file
-      const configData = await readFile(this.configPath, 'utf8');
-      const fileConfig = JSON.parse(configData);
-      
-      // Merge with defaults
-      this.config = { ...this.config, ...fileConfig };
-      
-      this.loaded = true;
-      return true;
-      
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        // Config file doesn't exist, use defaults
-        this.loaded = true;
-        return false;
-      } else {
-        throw new Error(`Failed to load config: ${error.message}`);
-      }
-    }
-  }
-
-  async save() {
-    try {
-      // Ensure config directory exists
-      const configDir = dirname(this.configPath);
-      await this.ensureDirectory(configDir);
-      
-      // Write config file
-      const configData = JSON.stringify(this.config, null, 2);
-      await writeFile(this.configPath, configData, 'utf8');
-      
-      return true;
-      
-    } catch (error) {
-      throw new Error(`Failed to save config: ${error.message}`);
-    }
   }
 
   get(key, defaultValue = undefined) {
@@ -200,121 +148,12 @@ export class Config {
     return true;
   }
 
-  async ensureDirectory(dirPath) {
-    try {
-      await access(dirPath);
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        const { mkdir } = await import('fs/promises');
-        await mkdir(dirPath, { recursive: true });
-      } else {
-        throw error;
-      }
-    }
-  }
 
-  // Environment-specific configurations
-  isDevelopment() {
-    return this.get('nodeEnv') === 'development';
-  }
-
-  isProduction() {
-    return this.get('nodeEnv') === 'production';
-  }
-
-  isDebugEnabled() {
-    return this.get('debug') || this.isDevelopment();
-  }
-
-  // Platform-specific configurations
-  getPlatformConfig() {
-    const platform = process.platform;
-    const platformConfigs = {
-      win32: {
-        manifestPath: join(homedir(), 'AppData', 'Local', 'BrowseAgent', 'manifest.json'),
-        tempDir: join(homedir(), 'AppData', 'Local', 'Temp', 'BrowseAgent')
-      },
-      darwin: {
-        manifestPath: join(homedir(), 'Library', 'Application Support', 'BrowseAgent', 'manifest.json'),
-        tempDir: join('/tmp', 'browse-agent')
-      },
-      linux: {
-        manifestPath: join(homedir(), '.local', 'share', 'browse-agent', 'manifest.json'),
-        tempDir: join('/tmp', 'browse-agent')
-      }
-    };
-    
-    return platformConfigs[platform] || platformConfigs.linux;
-  }
-
-  // Get effective configuration (with platform overrides)
-  getEffectiveConfig() {
-    const platformConfig = this.getPlatformConfig();
-    return {
-      ...this.config,
-      ...platformConfig,
-      // Override with explicitly set platform values
-      manifestPath: this.get('manifestPath') || platformConfig.manifestPath,
-      tempDir: this.get('tempDir') || platformConfig.tempDir
-    };
-  }
-
-  // Configuration presets
-  static getDevelopmentPreset() {
-    return {
-      debug: true,
-      logLevel: 'debug',
-      nodeEnv: 'development',
-      enableCursor: true,
-      heartbeatInterval: 10000, // More frequent in dev
-      toolTimeout: 120000 // Longer timeout for debugging
-    };
-  }
-
-  static getProductionPreset() {
-    return {
-      debug: false,
-      logLevel: 'info',
-      nodeEnv: 'production',
-      enableCursor: false, // Disabled by default in production
-      heartbeatInterval: 30000,
-      toolTimeout: 60000
-    };
-  }
-
-  static getTestingPreset() {
-    return {
-      debug: true,
-      logLevel: 'debug',
-      nodeEnv: 'test',
-      port: 8766, // Different port for testing
-      timeout: 10000,
-      toolTimeout: 30000
-    };
-  }
-
-  // Apply preset configuration
-  applyPreset(presetName) {
-    const presets = {
-      development: Config.getDevelopmentPreset(),
-      production: Config.getProductionPreset(),
-      testing: Config.getTestingPreset()
-    };
-    
-    const preset = presets[presetName];
-    if (!preset) {
-      throw new Error(`Unknown preset: ${presetName}`);
-    }
-    
-    this.merge(preset);
-  }
 
   // Export configuration for debugging
   export() {
     return {
       ...this.config,
-      configPath: this.configPath,
-      loaded: this.loaded,
       platform: process.platform,
       nodeVersion: process.version
     };
@@ -329,8 +168,6 @@ export class Config {
   clone() {
     const newConfig = new Config();
     newConfig.config = JSON.parse(JSON.stringify(this.config));
-    newConfig.configPath = this.configPath;
-    newConfig.loaded = this.loaded;
     return newConfig;
   }
 }

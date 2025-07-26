@@ -40,6 +40,7 @@ export class ExtensionBridge extends EventEmitter {
     this.handleError = this.handleError.bind(this);
   }
 
+
   async initialize() {
     if (this.isInitialized) {
       return;
@@ -48,10 +49,21 @@ export class ExtensionBridge extends EventEmitter {
     this.logger.info('Initializing extension bridge...');
     
     if (this.useWebSocket) {
-      await this.startWebSocketServer();
+      try {
+        await this.startWebSocketServer();
+      } catch (error) {
+        this.logger.error('Failed to initialize WebSocket server:', error);
+        
+        // If we can't start the WebSocket server, we can still continue in limited mode
+        if (error.code === 'EADDRINUSE') {
+          this.logger.warn('Continuing without WebSocket server - extension features will be limited');
+          this.logger.warn('To fix this: kill existing processes using the port or restart your system');
+        } else {
+          throw error; // Re-throw non-port-conflict errors
+        }
+      }
     } else {
       // For native messaging, we don't need a server
-      // The extension will connect directly via Chrome APIs
       this.logger.info('Extension bridge initialized (native messaging mode)');
     }
     
@@ -62,18 +74,42 @@ export class ExtensionBridge extends EventEmitter {
   }
 
   async startWebSocketServer() {
+    const maxRetries = 5;
+    let currentPort = this.port;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await this.tryStartServer(currentPort);
+        this.port = currentPort; // Update the port if it changed
+        return;
+      } catch (error) {
+        if (error.code === 'EADDRINUSE') {
+          this.logger.warn(`Port ${currentPort} is in use, trying port ${currentPort + 1}...`);
+          currentPort++;
+        } else {
+          throw error;
+        }
+      }
+    }
+    
+    throw new Error(`Failed to start WebSocket server after ${maxRetries} attempts. All ports from ${this.port} to ${currentPort - 1} are in use.`);
+  }
+
+  async tryStartServer(port) {
     return new Promise((resolve, reject) => {
       try {
         this.server = new WebSocketServer({
-          port: this.port,
+          port: port,
           host: '127.0.0.1'
         });
         
         this.server.on('connection', this.handleConnection);
-        this.server.on('error', this.handleError);
+        this.server.on('error', (error) => {
+          reject(error);
+        });
         
         this.server.on('listening', () => {
-          this.logger.info(`Extension bridge WebSocket server listening on port ${this.port}`);
+          this.logger.info(`Extension bridge WebSocket server listening on port ${port}`);
           resolve();
         });
         
@@ -83,6 +119,7 @@ export class ExtensionBridge extends EventEmitter {
       }
     });
   }
+
 
   async disconnect() {
     this.logger.info('Disconnecting extension bridge...');
@@ -171,9 +208,6 @@ export class ExtensionBridge extends EventEmitter {
         lastSeen: Date.now()
       });
       
-      // Create/update native messaging manifest for this extension
-      await this.createNativeManifestForExtension(extensionId);
-      
       // Send handshake response
       this.sendMessage({
         type: 'handshake-response',
@@ -201,49 +235,6 @@ export class ExtensionBridge extends EventEmitter {
         error: error.message,
         timestamp: Date.now()
       });
-    }
-  }
-
-
-  async createNativeManifestForExtension(extensionId) {
-    try {
-      const manifestDir = this.getNativeManifestDirectory();
-      await mkdir(manifestDir, { recursive: true });
-      
-      const manifest = {
-        name: 'com.browseagent.mcp',
-        description: 'BrowseAgent MCP Native Host',
-        path: process.argv[1], // Current script path
-        type: 'stdio',
-        allowed_origins: [
-          `chrome-extension://${extensionId}/`
-        ]
-      };
-      
-      const manifestPath = join(manifestDir, 'com.browseagent.mcp.json');
-      await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-      
-      this.logger.info(`Native manifest created for extension: ${extensionId}`);
-      this.logger.debug(`Manifest path: ${manifestPath}`);
-      
-    } catch (error) {
-      this.logger.error('Failed to create native manifest:', error);
-      throw error;
-    }
-  }
-
-  getNativeManifestDirectory() {
-    const home = homedir();
-    
-    switch (process.platform) {
-      case 'win32':
-        return join(home, 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'NativeMessagingHosts');
-      case 'darwin':
-        return join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts');
-      case 'linux':
-        return join(home, '.config', 'google-chrome', 'NativeMessagingHosts');
-      default:
-        throw new Error(`Unsupported platform: ${process.platform}`);
     }
   }
 
@@ -473,16 +464,5 @@ export class ExtensionBridge extends EventEmitter {
     };
   }
 
-  // Method for native messaging mode (used by Chrome extension)
-  handleNativeMessage(message) {
-    this.handleMessage(Buffer.from(JSON.stringify(message)));
-  }
-
-  // Method to send response back in native messaging mode
-  sendNativeResponse(response) {
-    // This would be handled by the calling MCP server
-    return response;
-  }
-  
   
 }

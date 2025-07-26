@@ -17,7 +17,7 @@ import { program } from 'commander';
 import chalk from 'chalk';
 
 // Initialize logger
-const logger = new Logger('NativeHost');
+const logger = new Logger('MCPServer');
 
 // Global state
 let server = null;
@@ -78,24 +78,23 @@ async function cleanup() {
 
 
 /**
- * Setup extension bridge with flexible connection handling
+ * Setup extension bridge with dual-mode support
+ * Always enables WebSocket for extension, regardless of MCP mode
  */
 function setupExtensionBridge() {
-  // Only use WebSocket if explicitly requested
-  const useWebSocket = program.opts().websocket;
-  
+  // Always use WebSocket for extension bridge
   bridge = new ExtensionBridge({
     port: config.get('port'),
     debug: config.get('debug'),
-    useWebSocket: useWebSocket,
+    useWebSocket: true, // Always enable WebSocket for extension
     logger: logger.createChild('Bridge')
   });
 
   // Handle extension connection events
   bridge.on('extension-connected', (extensionInfo) => {
-    logger.info(chalk.green(`🔗 Extension connected: ${extensionInfo.extensionId}`));
-    logger.info(chalk.gray(`   Version: ${extensionInfo.version}`));
-    logger.info(chalk.gray(`   Capabilities: ${Object.keys(extensionInfo.capabilities || {}).join(', ')}`));
+    logger.info(chalk.green(`🔗 Extension connected: ${extensionInfo?.extensionId}`));
+    logger.info(chalk.gray(`   Version: ${extensionInfo?.version}`));
+    logger.info(chalk.gray(`   Capabilities: ${Object.keys(extensionInfo?.capabilities || {}).join(', ')}`));
     
     // Notify MCP server about extension availability
     if (server) {
@@ -122,6 +121,7 @@ function setupExtensionBridge() {
 
   return bridge;
 }
+
 
 
 /**
@@ -253,28 +253,27 @@ function setupMCPServer() {
 
 
 /**
- * Main application entry point
+ * Main application entry point - Updated for dual mode
  */
 async function main() {
   try {
     // Parse command line arguments
     program
-      .name('browseagent-host')
-      .description('BrowseAgent Native Host - Flexible Extension Connection')
+      .name('browseagent-mcp')
+      .description('BrowseAgent MCP Server - Dual Mode Operation')
       .version('1.0.0')
       .option('-d, --debug', 'Enable debug logging')
       .option('-p, --port <port>', 'WebSocket port for extension communication', '8765')
       .option('-c, --config <path>', 'Configuration file path')
       .option('--stdio', 'Force STDIO communication (default unless --websocket used)')
-      .option('--websocket', 'Force WebSocket communication (for testing)')
+      .option('--websocket', 'Force WebSocket communication for MCP (for testing)')
       .option('--wait-extension', 'Wait for extension before starting (default: false)')
       .parse();
 
     const options = program.opts();
 
     // Initialize configuration
-    config = new Config(options.config);
-    await config.load();
+    config = new Config();
 
     // Override config with command line options
     if (options.debug) config.set('debug', true);
@@ -289,30 +288,23 @@ async function main() {
     logger.info(`Node.js: ${chalk.green(process.version)}`);
     logger.info(`Platform: ${chalk.green(process.platform)} ${process.arch}`);
 
-    // Determine communication mode
-    const useWebSocket = options.websocket;
+    // Determine MCP communication mode
+    const useMCPWebSocket = options.websocket;
     
-    if (useWebSocket) {
-      logger.info('Communication: ' + chalk.yellow(`WebSocket (port ${config.get('port')})`));
-      logger.info('Mode: ' + chalk.cyan('Extension Testing Mode'));
+    if (useMCPWebSocket) {
+      logger.info('MCP Communication: ' + chalk.yellow('WebSocket (Testing Mode)'));
     } else {
-      logger.info('Communication: ' + chalk.yellow('STDIO (Native Messaging)'));
-      logger.info('Mode: ' + chalk.cyan('MCP Client Mode'));
+      logger.info('MCP Communication: ' + chalk.yellow('STDIO (Production Mode)'));
     }
+    
+    logger.info('Extension Communication: ' + chalk.cyan(`WebSocket (port ${config.get('port')})`));
+    logger.info('Mode: ' + chalk.cyan('Dual Mode - STDIO + WebSocket'));
 
-    // Initialize extension bridge (only if WebSocket mode)
-    if (useWebSocket) {
-      logger.info('🔧 Initializing extension bridge...');
-      setupExtensionBridge();
-      await bridge.initialize();
-      logger.info('✅ Extension bridge ready');
-    } else {
-      // In STDIO mode, create a minimal bridge for tool execution
-      logger.info('🔧 Initializing minimal extension bridge...');
-      setupExtensionBridge();
-      await bridge.initialize();
-      logger.info('✅ Extension bridge ready (STDIO mode)');
-    }
+    // Initialize extension bridge (always WebSocket for extensions)
+    logger.info('🔧 Initializing extension bridge...');
+    setupExtensionBridge();
+    await bridge.initialize();
+    logger.info('✅ Extension bridge ready');
 
     // Initialize MCP server
     logger.info('🔧 Initializing MCP server...');
@@ -321,23 +313,21 @@ async function main() {
     logger.info('✅ MCP server ready');
 
     // Show operational status
-    logger.info(chalk.green.bold('\n🚀 BrowseAgent Native Host is running'));
+    logger.info(chalk.green.bold('\n🚀 BrowseAgent MCP Server is running'));
     
-    if (useWebSocket) {
-      logger.info(chalk.cyan(`📡 Ready for extension connection on ws://localhost:${config.get('port')}`));
-      logger.info(chalk.blue('\n🔌 Extension Connection:'));
-      logger.info(chalk.gray('   • Extension can connect/disconnect at any time'));
-      logger.info(chalk.gray('   • Click "Connect" in extension popup to connect'));
-      logger.info(chalk.gray('   • Full browser automation available when connected'));
-      logAvailableTools();
+    if (useMCPWebSocket) {
+      logger.info(chalk.cyan('📡 MCP: Ready for client connection via WebSocket'));
+      logger.info(chalk.cyan(`📡 Extension: Ready for connection on ws://localhost:${config.get('port')}`));
     } else {
-      logger.info(chalk.cyan('📡 Ready for MCP client connection via stdin/stdout'));
-      logger.info(chalk.blue('\n🔌 MCP Client Mode:'));
-      logger.info(chalk.gray('   • Communicating via STDIO (stdin/stdout)'));
-      logger.info(chalk.gray('   • Chrome extension can connect via WebSocket separately'));
-      logger.info(chalk.gray('   • Full tools available when extension connected'));
-      logger.info(chalk.gray('   • Limited tools available without extension'));
+      logger.info(chalk.cyan('📡 MCP: Ready for client connection via stdin/stdout'));
+      logger.info(chalk.cyan(`📡 Extension: Ready for connection on ws://localhost:${config.get('port')}`));
     }
+    
+    logger.info(chalk.blue('\n🔌 Dual Mode Operation:'));
+    logger.info(chalk.gray('   • Claude Desktop connects via STDIO'));
+    logger.info(chalk.gray('   • Chrome Extension connects via WebSocket'));
+    logger.info(chalk.gray('   • Both can operate simultaneously'));
+    logger.info(chalk.gray('   • Full browser automation when extension connected'));
 
     // Optional: Wait for extension if requested
     if (options.waitExtension) {
@@ -345,12 +335,10 @@ async function main() {
       await waitForExtensionConnection();
     }
 
-    // Keep the process running and monitor connections
-    if (useWebSocket) {
-      startConnectionMonitoring();
-    } else {
-      // In STDIO mode, the process will stay alive handling MCP requests
+    // In STDIO mode, the process stays alive handling MCP requests
+    if (!useMCPWebSocket) {
       logger.info(chalk.gray('\n📡 Listening for MCP requests on stdin...'));
+      logger.info(chalk.gray('📡 Listening for extension connections on WebSocket...'));
     }
 
   } catch (error) {
