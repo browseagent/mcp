@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Manual Tool Call Test
+ * Tool Call Test
  * 
  * Interactive script for manually testing specific tool calls
  * Useful for debugging specific tool execution flows
@@ -15,7 +15,7 @@ import { WebSocket } from 'ws';
 import chalk from 'chalk';
 import readline from 'readline';
 
-class ManualToolTester {
+class ToolTester {
   constructor() {
     this.config = new Config();
     this.logger = new Logger('ManualTest');
@@ -266,11 +266,11 @@ class ManualToolTester {
 
 // Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const tester = new ManualToolTester();
+  const tester = new ToolTester();
   tester.start().catch((error) => {
     console.error(chalk.red('Fatal error:'), error);
     process.exit(1);
   });
 }
 
-export { ManualToolTester };
+export { ToolTester };

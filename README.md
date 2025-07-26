@@ -164,6 +164,7 @@ Open the extension popup to:
 - ✅ **Permission Based** - Extension only accesses tabs when explicitly used
 - ✅ **Open Source** - Full transparency in code and operations
 
+
 ## 🏗️ Development
 
 ### Local Development Setup
@@ -239,12 +240,258 @@ npm run dev
 # Run with WebSocket mode for extension testing
 npm run dev -- --websocket
 
-# Run tests
+# Run with watch mode for auto-restart during development
+npm run dev -- --websocket --debug
+```
+
+### 🧪 Comprehensive Testing Suite
+
+The project includes a full testing suite to validate all components:
+
+#### Core Test Commands
+
+```bash
+# Run full test suite
 npm test
 
-# Run specific tests
+# Run all manual tests sequentially
+npm run test:all
+
+# Watch mode - auto-run tests on file changes
+npm run test:watch
+```
+
+#### Individual Test Suites
+
+##### 1. Connection Tests (`test:connection`)
+```bash
 npm run test:connection
+```
+
+**What it tests:**
+- ✅ Native host startup and initialization
+- ✅ WebSocket server creation and binding
+- ✅ Extension bridge protocol handshake
+- ✅ Architecture validation (STDIO vs WebSocket separation)
+- ✅ Port conflict resolution
+- ✅ Error handling and timeout scenarios
+
+**Use when:** Setting up development environment or diagnosing connection issues.
+
+##### 2. Tools Tests (`test:tools`)
+```bash
 npm run test:tools
+```
+
+**What it tests:**
+- ✅ Tool registry loading and structure validation
+- ✅ Tool argument validation (required/optional fields)
+- ✅ Schema completeness and type checking
+- ✅ Tool categorization (navigation, interaction, utility, inspection)
+- ✅ Input constraint validation (min/max values, patterns)
+- ✅ Error message accuracy for invalid inputs
+
+**Use when:** Adding new tools or modifying existing tool schemas.
+
+##### 3. Debug Tests (`test:debug`)
+```bash
+npm run test:debug
+```
+
+**What it tests:**
+- ✅ Bridge ↔ Server communication flow
+- ✅ Extension connection event propagation
+- ✅ Tool call request/response cycle
+- ✅ Mock extension handshake simulation
+- ✅ Event listener setup and cleanup
+- ✅ Status synchronization between components
+
+**Use when:** Debugging communication issues between bridge and server.
+
+##### 4. Interactive Tool Tests (`test:tool`)
+```bash
+npm run test:tool
+```
+
+**What it provides:**
+- 🎮 Interactive CLI for manual tool testing
+- 🔧 Real-time tool execution with live extension
+- 📊 Connection status monitoring
+- 🎯 Specific tool argument input and validation
+- 📝 Step-by-step debugging of tool calls
+
+**Use when:** Manually testing specific tools with real browser extension.
+
+#### Test Modes
+
+##### STDIO Mode Testing (Production)
+```bash
+# Test STDIO mode (what Claude Desktop uses)
+node src/index.js --debug
+
+# Send test MCP message
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node src/index.js
+```
+
+##### WebSocket Mode Testing (Development)
+```bash
+# Test WebSocket mode (for extension testing)
+node src/index.js --websocket --debug
+
+# Test dual-mode operation
+node src/index.js --websocket --debug --wait-extension
+```
+
+#### Advanced Testing Scenarios
+
+##### Performance Testing
+```bash
+# Memory usage monitoring
+node --max-old-space-size=512 src/index.js --debug
+
+# CPU profiling
+node --inspect --inspect-brk src/index.js --debug
+```
+
+##### Integration Testing
+```bash
+# Test with specific port
+npm run test:connection -- --port 9999
+
+# Test with timeout scenarios
+npm run test:debug -- --timeout 5000
+
+# Test error recovery
+npm run test:tools -- --force-errors
+```
+
+### Development Tools
+
+#### Linting and Code Quality
+```bash
+# Run ESLint
+npm run lint
+
+# Fix auto-fixable issues
+npm run lint -- --fix
+```
+
+#### Debugging Tools
+```bash
+# Enable Node.js debugging
+npm run dev -- --inspect
+
+# Debug with breakpoints
+npm run dev -- --inspect-brk
+
+# Verbose logging
+npm run dev -- --debug
+```
+
+#### Development Scripts
+```bash
+# Start in development mode
+npm run start
+
+# Start with debugging enabled
+npm run dev
+
+# Quick development test
+npm run dev -- --websocket --debug --wait-extension
+```
+
+### Testing Best Practices
+
+#### Before Committing
+```bash
+# Run full validation suite
+npm run test:all
+npm run lint
+
+# Test both modes
+node src/index.js --debug  # STDIO mode
+node src/index.js --websocket --debug  # WebSocket mode
+```
+
+#### Continuous Testing During Development
+```bash
+# Watch mode for automatic test runs
+npm run test:watch
+
+# Development mode with auto-restart
+nodemon src/index.js -- --websocket --debug
+```
+
+#### Testing with Real Extension
+1. **Install Chrome extension** in development mode
+2. **Run interactive tool tester**: `npm run test:tool`
+3. **Connect extension** via popup
+4. **Test specific tools** interactively
+5. **Verify results** in browser
+
+### Test Output Examples
+
+#### Successful Connection Test
+```
+🧪 BrowseAgent MCP Connection Tests
+
+📋 Testing: Native Host Startup...
+   ✓ Process started successfully
+✅ Native Host Startup: PASSED
+
+📋 Testing: WebSocket Connection...
+   ✓ WebSocket connected
+✅ WebSocket Connection: PASSED
+
+📊 Test Summary
+✅ Passed: 4
+❌ Failed: 0
+📈 Success Rate: 100%
+
+🎉 All connection tests passed!
+```
+
+#### Tool Validation Results
+```
+🧪 BrowseAgent MCP Tools Tests
+
+📋 Testing: Tool Registry Loading...
+   ✓ Found 12 tools in registry
+   ✓ All 12 tools have valid structure
+✅ Tool Registry Loading: PASSED
+
+🛠️ Tool Summary:
+📁 NAVIGATION:
+   • browser_navigate: Navigate to a URL in a new or existing tab
+   • browser_go_back: Go back to the previous page
+
+✅ Total: 12 tools ready for use
+```
+
+### Troubleshooting Development Issues
+
+#### Common Development Problems
+
+| Issue | Test Command | Solution |
+|-------|-------------|----------|
+| Extension not connecting | `npm run test:connection` | Check WebSocket port availability |
+| Tool validation failing | `npm run test:tools` | Review tool schema definitions |
+| Bridge communication broken | `npm run test:debug` | Verify event listener setup |
+| Performance issues | `node --inspect src/index.js` | Profile memory/CPU usage |
+
+#### Debug Logging Levels
+```bash
+# Minimal logging
+node src/index.js
+
+# Standard debug logging
+node src/index.js --debug
+
+# Verbose component logging
+DEBUG=* node src/index.js --debug
+
+# Specific component debugging
+DEBUG=ExtensionBridge,MCPServer node src/index.js --debug
 ```
 
 ### Building from Source
@@ -255,29 +502,11 @@ npm install -g .
 
 # Or run directly
 node src/index.js --debug
+
+# Package for distribution
+npm pack
 ```
 
-### Testing
-
-```bash
-# Run full test suite
-npm test
-
-# Test connection
-npm run test:connection
-
-# Test specific tools
-npm run test:tools
-
-# Manual MCP protocol test
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node src/index.js
-```
-
-#### Test STDIO mode (what Claude Desktop uses)
-node src/index.js --debug
-
-#### Test WebSocket mode (for extension testing)
-node src/index.js --websocket --debug
 
 
 ## 🤝 Contributing
