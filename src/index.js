@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * BrowseAgent Native Host
+ * BrowseAgent MCP Server
  * 
  * Acts as a bridge between MCP client and the Chrome Extension.
  * Implements the MCP (Model Context Protocol) server specification.
@@ -22,8 +22,12 @@ const logger = new Logger('MCPServer');
 // Global state
 let server = null;
 let bridge = null;
+let bridgeUsers = 0
 let config = null;
 let isShuttingDown = false;
+
+// Track active MCP servers for notifications
+const activeMCPServers = new Set();
 
 // Global error handlers
 process.on('uncaughtException', (error) => {
@@ -53,6 +57,7 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
+
 async function cleanup() {
   if (isShuttingDown) return;
   isShuttingDown = true;
@@ -60,14 +65,25 @@ async function cleanup() {
   try {
     logger.info('🛑 Shutting down services...');
     
-    if (bridge) {
-      await bridge.disconnect();
-      logger.debug('✅ Extension bridge disconnected');
-    }
-    
     if (server) {
+      activeMCPServers.delete(server);
       await server.shutdown();
       logger.debug('✅ MCP server shut down');
+    }
+    
+    // Only disconnect bridge if no other users
+    if (bridge) {
+      bridgeUsers--;
+      logger.debug(`Bridge users remaining: ${bridgeUsers}`);
+      
+      if (bridgeUsers <= 0) {
+        await bridge.disconnect();
+        logger.debug('✅ Extension bridge disconnected');
+        bridge = null;
+        bridgeUsers = 0;
+      } else {
+        logger.debug('✅ Bridge kept alive for other instances');
+      }
     }
     
     logger.info('✅ Cleanup completed');
@@ -82,6 +98,14 @@ async function cleanup() {
  * Always enables WebSocket for extension, regardless of MCP mode
  */
 function setupExtensionBridge() {
+
+  // If bridge already exists, reuse it
+  if (bridge && bridge.isInitialized) {
+    bridgeUsers++;
+    logger.info(chalk.cyan(`🔗 Reusing existing extension bridge (users: ${bridgeUsers})`));
+    return bridge;
+  }
+
   // Always use WebSocket for extension bridge
   bridge = new ExtensionBridge({
     port: config.get('port'),
@@ -90,25 +114,23 @@ function setupExtensionBridge() {
     logger: logger.createChild('Bridge')
   });
 
+  bridgeUsers = 1;
+
   // Handle extension connection events
   bridge.on('extension-connected', (extensionInfo) => {
     logger.info(chalk.green(`🔗 Extension connected: ${extensionInfo?.extensionId}`));
     logger.info(chalk.gray(`   Version: ${extensionInfo?.version}`));
     logger.info(chalk.gray(`   Capabilities: ${Object.keys(extensionInfo?.capabilities || {}).join(', ')}`));
     
-    // Notify MCP server about extension availability
-    if (server) {
-      server.setExtensionAvailable(true, extensionInfo);
-    }
+    // Notify all active MCP servers about extension availability
+    notifyAllServersOfExtensionStatus(true, extensionInfo);
   });
 
   bridge.on('extension-disconnected', (extensionInfo) => {
     logger.info(chalk.yellow(`🔌 Extension disconnected: ${extensionInfo?.extensionId || 'unknown'}`));
     
-    // Notify MCP server about extension unavailability
-    if (server) {
-      server.setExtensionAvailable(false);
-    }
+    // Notify all active MCP servers about extension unavailability
+    notifyAllServersOfExtensionStatus(false);
   });
 
   bridge.on('extension-error', (error) => {
@@ -123,6 +145,11 @@ function setupExtensionBridge() {
 }
 
 
+function notifyAllServersOfExtensionStatus(available, extensionInfo = null) {
+  for (const server of activeMCPServers) {
+    server.setExtensionAvailable(available, extensionInfo);
+  }
+}
 
 /**
  * Setup MCP server with correct mode detection
@@ -131,7 +158,7 @@ function setupMCPServer() {
   // Fixed mode detection: Default to STDIO unless explicitly using WebSocket
   const useStdio = !program.opts().websocket;
   
-  const server = createServer({
+  server = createServer({
     bridge,
     config,
     logger: logger.createChild('MCP'),
@@ -139,6 +166,9 @@ function setupMCPServer() {
     // Enable flexible mode - server works with or without extension
     flexibleMode: true
   });
+
+  // Add to active servers set
+  activeMCPServers.add(server);
 
   // Handle server lifecycle events
   server.on('server-started', (info) => {
@@ -150,6 +180,8 @@ function setupMCPServer() {
 
   server.on('server-stopped', () => {
     logger.info(chalk.yellow('🛑 MCP server stopped'));
+    // Remove from active servers when stopped
+    activeMCPServers.delete(server);
   });
 
   server.on('server-error', (error) => {
@@ -283,13 +315,15 @@ async function main() {
     logger.setLevel(config.get('debug') ? 'debug' : 'info');
 
     // Show startup banner
-    logger.info(chalk.blue.bold('🤖 BrowseAgent Native Host'));
+    logger.info(chalk.blue.bold('🤖 BrowseAgent MCP Server'));
     logger.info(`Version: ${chalk.green('1.0.0')}`);
     logger.info(`Node.js: ${chalk.green(process.version)}`);
     logger.info(`Platform: ${chalk.green(process.platform)} ${process.arch}`);
 
     // Determine MCP communication mode
     const useMCPWebSocket = options.websocket;
+
+    logger.info('MCP Commands: '+ options);
     
     if (useMCPWebSocket) {
       logger.info('MCP Communication: ' + chalk.yellow('WebSocket (Testing Mode)'));
@@ -302,13 +336,19 @@ async function main() {
 
     // Initialize extension bridge (always WebSocket for extensions)
     logger.info('🔧 Initializing extension bridge...');
-    setupExtensionBridge();
-    await bridge.initialize();
-    logger.info('✅ Extension bridge ready');
+    bridge = setupExtensionBridge();
+
+    // Only initialize if not already initialized
+    if (!bridge.isInitialized) {
+      await bridge.initialize();
+      logger.info('✅ Extension bridge ready');
+    } else {
+      logger.info('✅ Extension bridge already ready');
+    }
 
     // Initialize MCP server
     logger.info('🔧 Initializing MCP server...');
-    const server = setupMCPServer();
+    server = setupMCPServer();
     await server.start();
     logger.info('✅ MCP server ready');
 
@@ -342,7 +382,7 @@ async function main() {
     }
 
   } catch (error) {
-    logger.error('Failed to start BrowseAgent Native Host:', error);
+    logger.error('Failed to start BrowseAgent MCP Server:', error);
     
     console.error(chalk.red('\n❌ Startup failed:'));
     console.error(chalk.red(error.message));
@@ -379,75 +419,6 @@ async function waitForExtensionConnection(timeout = 60000) {
   });
 }
 
-/**
- * Monitor and log connection status changes
- */
-function startConnectionMonitoring() {
-  let lastExtensionStatus = false;
-  let lastMCPClientStatus = false;
-
-  setInterval(() => {
-    const bridgeStatus = bridge?.getStatus();
-    const serverStatus = server?.getStatus();
-    
-    const extensionConnected = bridgeStatus?.extensionConnected || false;
-    const mcpClientConnected = serverStatus?.initialized || false;
-
-    // Log extension status changes
-    if (extensionConnected !== lastExtensionStatus) {
-      if (extensionConnected) {
-        logger.info(chalk.green('🔗 Extension connection established'));
-        logAvailableTools();
-      } else {
-        logger.info(chalk.yellow('🔌 Extension connection lost'));
-        logAvailableTools();
-      }
-      lastExtensionStatus = extensionConnected;
-    }
-
-    // Log MCP client status changes  
-    if (mcpClientConnected !== lastMCPClientStatus) {
-      if (mcpClientConnected) {
-        logger.info(chalk.green('🎯 MCP client connected'));
-      } else {
-        logger.info(chalk.yellow('👋 MCP client disconnected'));
-      }
-      lastMCPClientStatus = mcpClientConnected;
-    }
-
-    // Log periodic status in debug mode
-    if (config?.get('debug') && Math.floor(Date.now() / 30000) % 2 === 0) {
-      logger.debug(`Status: Extension=${extensionConnected}, MCP=${mcpClientConnected}`);
-    }
-
-  }, 5000); // Check every 5 seconds
-}
-
-/**
- * Log currently available tools
- */
-function logAvailableTools() {
-  const extensionConnected = bridge?.getStatus()?.extensionConnected || false;
-  
-  if (extensionConnected) {
-    logger.info(chalk.green('\n🛠️  Available Tools (Full Mode):'));
-    logger.info(chalk.gray('   • browser_navigate - Navigate to URLs'));
-    logger.info(chalk.gray('   • browser_click - Click elements'));
-    logger.info(chalk.gray('   • browser_type - Type text'));
-    logger.info(chalk.gray('   • browser_screenshot - Take screenshots'));
-    logger.info(chalk.gray('   • browser_snapshot - Get page structure'));
-    logger.info(chalk.gray('   • browser_hover - Hover over elements'));
-    logger.info(chalk.gray('   • browser_drag_drop - Drag and drop'));
-    logger.info(chalk.gray('   • browser_wait - Wait/pause'));
-    logger.info(chalk.gray('   • browser_press_key - Press keys'));
-    logger.info(chalk.gray('   • browser_get_console_logs - Get console logs'));
-  } else {
-    logger.info(chalk.yellow('\n🛠️  Available Tools (Limited Mode):'));
-    logger.info(chalk.gray('   • browser_wait - Wait/pause'));
-    logger.info(chalk.gray('   • system_info - Get system information'));
-    logger.info(chalk.gray('   Note: Install and connect Chrome extension for full browser automation'));
-  }
-}
 
 /**
  * Show troubleshooting tips

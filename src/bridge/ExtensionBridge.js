@@ -32,12 +32,16 @@ export class ExtensionBridge extends EventEmitter {
     this.connectionTimeout = 30000; // 30 seconds
     this.heartbeatInterval = null;
     this.lastHeartbeat = null;
+
+    this.pendingConnections = new Map();   // Track unvalidated connections
+    this.handshakeTimeout = 3000;    // 3 seconds for handshake validation
     
     // Bind methods
     this.handleConnection = this.handleConnection.bind(this);
     this.handleMessage = this.handleMessage.bind(this);
     this.handleDisconnection = this.handleDisconnection.bind(this);
     this.handleError = this.handleError.bind(this);
+    
   }
 
 
@@ -136,6 +140,15 @@ export class ExtensionBridge extends EventEmitter {
       this.extensionSocket = null;
     }
     
+    // Clean up pending connections
+    for (const [connectionId, pendingConnection] of this.pendingConnections) {
+      if (pendingConnection.handshakeTimer) {
+        clearTimeout(pendingConnection.handshakeTimer);
+      }
+      pendingConnection.ws.close();
+    }
+    this.pendingConnections.clear();
+    
     // Close server
     if (this.server) {
       await new Promise((resolve) => {
@@ -157,84 +170,298 @@ export class ExtensionBridge extends EventEmitter {
     this.logger.info('Extension bridge disconnected');
   }
 
-  handleConnection(ws) {
-    this.logger.info('Extension connected via WebSocket');
+
+  handleConnection(ws, request) {
+    const connectionId = this.generateConnectionId();
+    const clientInfo = this.extractClientInfo(request);
     
-    // Close existing connection if any
-    if (this.extensionSocket) {
-      this.extensionSocket.close();
-    }
+    this.logger.info(`New WebSocket connection from ${clientInfo.origin || 'unknown'} (${connectionId})`);
+    this.logger.debug('Connection details:', clientInfo);
     
-    this.extensionSocket = ws;
-    this.lastHeartbeat = Date.now();
-    
-    // Set up event handlers
-    ws.on('message', this.handleMessage);
-    ws.on('close', this.handleDisconnection);
-    ws.on('error', this.handleError);
-    
-    // Send welcome message
-    this.sendMessage({
-      type: 'welcome',
-      message: 'Connected to Browse Agent MCP Server',
-      timestamp: new Date().toISOString(),
-      capabilities: {
-        tools: true,
-        heartbeat: true,
-        version: '1.0.0'
-      }
+    // Store pending connection
+    this.pendingConnections.set(connectionId, {
+      ws,
+      connectionId,
+      clientInfo,
+      connectedAt: Date.now(),
+      validated: false
     });
     
-    this.emit('extension-connected');
+    // Set up basic event handlers for pending connection
+    ws.on('message', (data) => this.handlePendingMessage(connectionId, data));
+    ws.on('close', () => this.handlePendingDisconnection(connectionId));
+    ws.on('error', (error) => this.handlePendingError(connectionId, error));
+    
+    // Set handshake timeout
+    const handshakeTimer = setTimeout(() => {
+      this.logger.warn(`Handshake timeout for connection ${connectionId}`);
+      this.rejectConnection(connectionId, 'Handshake timeout');
+    }, this.handshakeTimeout);
+    
+    // Store timer for cleanup
+    this.pendingConnections.get(connectionId).handshakeTimer = handshakeTimer;
+    
+    // Send initial challenge/welcome
+    this.sendToPendingConnection(connectionId, {
+      type: 'connection-challenge',
+      message: 'BrowseAgent MCP Server - Send handshake to authenticate',
+      timestamp: Date.now(),
+      connectionId,
+      requiredFields: ['type', 'extensionId', 'version', 'capabilities']
+    });
   }
 
 
-  async handleExtensionHandshake(message) {
-    const { extensionId, version, timestamp, capabilities } = message;
-    
-    this.logger.info(`Handshake received from extension: ${extensionId}`);
-    
+  generateConnectionId() {
+    return `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  extractClientInfo(request) {
+    return {
+      userAgent: request.headers['user-agent'],
+      origin: request.headers.origin,
+      host: request.headers.host,
+      remoteAddress: request.connection?.remoteAddress,
+      remotePort: request.connection?.remotePort
+    };
+  }
+
+  handlePendingMessage(connectionId, data) {
     try {
-      // Register this extension
-      this.registeredExtensions.add(extensionId);
-      this.activeExtensionId = extensionId;
+      const message = JSON.parse(data.toString('utf8'));
+      this.logger.debug(`Pending connection ${connectionId} message:`, message);
       
-      // Store extension info
-      this.extensionManifests.set(extensionId, {
-        id: extensionId,
-        version,
-        capabilities,
-        connectedAt: timestamp,
-        lastSeen: Date.now()
-      });
-      
-      // Send handshake response
-      this.sendMessage({
-        type: 'handshake-response',
-        success: true,
-        message: 'Connected to BrowseAgent MCP Server',
-        timestamp: Date.now(),
-        serverInfo: {
-          name: 'browseagent-mcp',
-          version: '1.0.0',
-          capabilities: {
-            browserAutomation: true,
-            mcpProtocol: true
-          }
-        }
-      });
-      
-      this.logger.info(`✅ Extension ${extensionId} connected successfully`);
-      this.emit('extension-registered', { extensionId, version });
+      if (message.type === 'handshake') {
+        this.processHandshake(connectionId, message);
+      } else {
+        this.logger.warn(`Unexpected message type from pending connection ${connectionId}: ${message.type}`);
+        this.rejectConnection(connectionId, 'Invalid message sequence - expected handshake');
+      }
       
     } catch (error) {
-      this.logger.error('Failed to handle extension handshake:', error);
-      
-      this.sendMessage({
-        type: 'connection-error',
-        error: error.message,
+      this.logger.error(`Failed to parse message from pending connection ${connectionId}:`, error);
+      this.rejectConnection(connectionId, 'Invalid message format');
+    }
+  }
+
+
+  async processHandshake(connectionId, handshakeMessage) {
+    const pendingConnection = this.pendingConnections.get(connectionId);
+    if (!pendingConnection) {
+      this.logger.warn(`Handshake for unknown connection: ${connectionId}`);
+      return;
+    }
+
+    this.logger.info(`Processing handshake for connection ${connectionId}`);
+    this.logger.debug('Handshake data:', handshakeMessage);
+
+    try {
+      // Validate handshake structure
+      const validationResult = this.validateHandshake(handshakeMessage);
+      if (!validationResult.valid) {
+        this.rejectConnection(connectionId, `Handshake validation failed: ${validationResult.reason}`);
+        return;
+      }
+
+      // Check for duplicate connections
+      if (this.registeredExtensions.has(handshakeMessage.extensionId)) {
+        this.logger.warn(`Extension ${handshakeMessage.extensionId} already connected, closing previous connection`);
+        this.disconnectExtension(handshakeMessage.extensionId);
+      }
+
+      // Accept the connection
+      await this.acceptConnection(connectionId, handshakeMessage);
+
+    } catch (error) {
+      this.logger.error(`Error processing handshake for ${connectionId}:`, error);
+      this.rejectConnection(connectionId, 'Internal handshake processing error');
+    }
+  }
+
+
+  validateHandshake(message) {
+    const required = ['type', 'extensionId', 'version', 'capabilities'];
+    
+    for (const field of required) {
+      if (!message[field]) {
+        return { valid: false, reason: `Missing required field: ${field}` };
+      }
+    }
+
+    if (message.type !== 'handshake') {
+      return { valid: false, reason: 'Invalid message type' };
+    }
+
+    if (typeof message.extensionId !== 'string' || message.extensionId.length === 0) {
+      return { valid: false, reason: 'Invalid extensionId' };
+    }
+
+    if (typeof message.version !== 'string' || message.version.length === 0) {
+      return { valid: false, reason: 'Invalid version' };
+    }
+
+    if (typeof message.capabilities !== 'object' || message.capabilities === null) {
+      return { valid: false, reason: 'Invalid capabilities object' };
+    }
+
+    return { valid: true };
+  }
+
+
+  async acceptConnection(connectionId, handshakeMessage) {
+    const pendingConnection = this.pendingConnections.get(connectionId);
+    if (!pendingConnection) {
+      return;
+    }
+
+    const { ws, handshakeTimer } = pendingConnection;
+    const { extensionId, version, capabilities, timestamp, userAgent, platform } = handshakeMessage;
+
+    // Clear handshake timeout
+    if (handshakeTimer) {
+      clearTimeout(handshakeTimer);
+    }
+
+    // Remove from pending connections
+    this.pendingConnections.delete(connectionId);
+
+    // Store validated connection
+    this.extensionSocket = ws;
+    this.lastHeartbeat = Date.now();
+    this.activeExtensionId = extensionId;
+
+    // Register extension
+    this.registeredExtensions.add(extensionId);
+    this.extensionManifests.set(extensionId, {
+      id: extensionId,
+      version,
+      capabilities,
+      userAgent,
+      platform,
+      connectedAt: timestamp || Date.now(),
+      lastSeen: Date.now(),
+      connectionId
+    });
+
+    // Set up validated connection handlers
+    ws.removeAllListeners(); // Remove pending handlers
+    ws.on('message', this.handleMessage);
+    ws.on('close', this.handleDisconnection);
+    ws.on('error', this.handleError);
+
+    // Send success response
+    this.sendMessage({
+      type: 'handshake-response',
+      success: true,
+      message: 'Connected to BrowseAgent MCP Server',
+      timestamp: Date.now(),
+      serverInfo: {
+        name: 'browseagent-mcp',
+        version: '1.0.0',
+        capabilities: {
+          browserAutomation: true,
+          mcpProtocol: true
+        }
+      }
+    });
+
+    // Log successful connection
+    this.logger.info(`✅ Extension ${extensionId} connected successfully`);
+    this.logger.info(`   Version: ${version}`);
+    this.logger.info(`   Platform: ${platform || 'unknown'}`);
+    this.logger.info(`   Capabilities: ${Object.keys(capabilities).join(', ')}`);
+
+    // Emit validated connection event
+    this.emit('extension-connected', {
+      extensionId,
+      version,
+      capabilities,
+      userAgent,
+      platform,
+      timestamp: Date.now()
+    });
+
+    this.emit('extension-registered', { extensionId, version });
+  }
+
+  
+  rejectConnection(connectionId, reason) {
+    const pendingConnection = this.pendingConnections.get(connectionId);
+    if (!pendingConnection) {
+      return;
+    }
+
+    const { ws, handshakeTimer } = pendingConnection;
+
+    this.logger.warn(`Rejecting connection ${connectionId}: ${reason}`);
+
+    // Clear timeout
+    if (handshakeTimer) {
+      clearTimeout(handshakeTimer);
+    }
+
+    // Send rejection message
+    try {
+      ws.send(JSON.stringify({
+        type: 'connection-rejected',
+        reason,
         timestamp: Date.now()
-      });
+      }));
+    } catch (error) {
+      // Ignore send errors for rejected connections
+    }
+
+    // Close connection
+    ws.close(1008, reason); // Policy violation close code
+
+    // Clean up
+    this.pendingConnections.delete(connectionId);
+  }
+
+
+  handlePendingDisconnection(connectionId) {
+    this.logger.debug(`Pending connection ${connectionId} disconnected`);
+    const pendingConnection = this.pendingConnections.get(connectionId);
+    
+    if (pendingConnection?.handshakeTimer) {
+      clearTimeout(pendingConnection.handshakeTimer);
+    }
+    
+    this.pendingConnections.delete(connectionId);
+  }
+
+  handlePendingError(connectionId, error) {
+    this.logger.error(`Pending connection ${connectionId} error:`, error);
+    this.rejectConnection(connectionId, 'Connection error');
+  }
+
+  sendToPendingConnection(connectionId, message) {
+    const pendingConnection = this.pendingConnections.get(connectionId);
+    if (!pendingConnection) {
+      return false;
+    }
+
+    try {
+      const messageStr = JSON.stringify(message);
+      pendingConnection.ws.send(messageStr);
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to send message to pending connection ${connectionId}:`, error);
+      return false;
+    }
+  }
+
+  disconnectExtension(extensionId) {
+    if (this.activeExtensionId === extensionId && this.extensionSocket) {
+      this.extensionSocket.close();
+      this.extensionSocket = null;
+    }
+    
+    this.registeredExtensions.delete(extensionId);
+    this.extensionManifests.delete(extensionId);
+    
+    if (this.activeExtensionId === extensionId) {
+      this.activeExtensionId = null;
     }
   }
 
@@ -247,9 +474,6 @@ export class ExtensionBridge extends EventEmitter {
       this.lastHeartbeat = Date.now();
       
       switch (message.type) {
-        case 'handshake':
-          this.handleExtensionHandshake(message);
-          break;
           
         case 'disconnect':
           this.handleExtensionDisconnect(message);
@@ -296,18 +520,7 @@ export class ExtensionBridge extends EventEmitter {
     }
   }
 
-  getConnectionStatus() {
-    return {
-      initialized: this.isInitialized,
-      extensionsConnected: this.registeredExtensions.size,
-      activeExtension: this.activeExtensionId,
-      registeredExtensions: Array.from(this.registeredExtensions),
-      lastHeartbeat: this.lastHeartbeat,
-      uptime: Date.now() - this.startTime
-    };
-  }
-
-   async waitForExtensionConnection(timeout = 30000) {
+  async waitForExtensionConnection(timeout = 30000) {
     if (this.registeredExtensions.size > 0) {
       return Array.from(this.registeredExtensions)[0];
     }
@@ -328,7 +541,6 @@ export class ExtensionBridge extends EventEmitter {
     this.logger.warn(`Extension disconnected: ${code} ${reason}`);
     this.extensionSocket = null;
     this.emit('extension-disconnected');
-    
     // Reject pending requests
     for (const [id, { reject }] of this.pendingRequests) {
       reject(new Error('Extension disconnected'));
@@ -457,7 +669,10 @@ export class ExtensionBridge extends EventEmitter {
     return {
       initialized: this.isInitialized,
       extensionConnected: !!this.extensionSocket,
+      pendingConnections: this.pendingConnections.size,
       pendingRequests: this.pendingRequests.size,
+      registeredExtensions: Array.from(this.registeredExtensions),
+      activeExtension: this.activeExtensionId,
       lastHeartbeat: this.lastHeartbeat,
       useWebSocket: this.useWebSocket,
       port: this.port

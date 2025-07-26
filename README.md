@@ -273,6 +273,13 @@ npm run test:tools
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node src/index.js
 ```
 
+#### Test STDIO mode (what Claude Desktop uses)
+node src/index.js --debug
+
+#### Test WebSocket mode (for extension testing)
+node src/index.js --websocket --debug
+
+
 ## 🤝 Contributing
 
 We welcome contributions! Here's how to get started:

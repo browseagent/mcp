@@ -11,8 +11,9 @@
     "test": "node --test test/*.test.js",
     "test:connection": "node test/connection.test.js",
     "test:tools": "node test/tools.test.js",
-    "test:client": "node test/client.test.js",
-    "test:all": "npm run test:connection && npm run test:tools",
+    "test:extension": "node test/extension.test.js",
+    "test:tool": "node test/tool.test.js",
+    "test:all": "npm run test:connection && npm run test:tools && npm run test:extension",
     "test:watch": "node --test --watch test/*.test.js"
   },
   "bin": {
