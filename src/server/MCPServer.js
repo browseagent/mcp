@@ -340,16 +340,6 @@ export class MCPServer extends EventEmitter {
       }
       
       let result;
-
-      console.log({
-        message: `YESSSSS: Preparing to execute tool ${name}`,
-        requiresExtension,
-        flexibleMode: this.flexibleMode,
-        extensionAvailable: this.extensionAvailable,
-        args,
-        clientInfo: this.clientInfo,
-        bridge: this.bridge
-      });
       
       if (requiresExtension && this.extensionAvailable) {
         // Execute tool via extension bridge
@@ -359,17 +349,6 @@ export class MCPServer extends EventEmitter {
         result = await this.executeLocalTool(name, args);
       } else if (this.flexibleMode) {
         // In flexible mode, provide helpful error message
-
-        console.log({
-          message: `NOOOOOO: Preparing to execute tool`,
-          requiresExtension,
-          extensionAvailable: this.extensionAvailable,
-          flexibleMode: this.flexibleMode,
-          args,
-          clientInfo: this.clientInfo,
-          bridge: this.bridge
-        });
-
 
         result = {
           content: [{
