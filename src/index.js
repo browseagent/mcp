@@ -299,7 +299,6 @@ async function main() {
       .option('-c, --config <path>', 'Configuration file path')
       .option('--stdio', 'Force STDIO communication (default unless --websocket used)')
       .option('--websocket', 'Force WebSocket communication for MCP (for testing)')
-      .option('--wait-extension', 'Wait for extension before starting (default: false)')
       .parse();
 
     const options = program.opts();
@@ -369,12 +368,6 @@ async function main() {
     logger.info(chalk.gray('   • Both can operate simultaneously'));
     logger.info(chalk.gray('   • Full browser automation when extension connected'));
 
-    // Optional: Wait for extension if requested
-    if (options.waitExtension) {
-      logger.info(chalk.yellow('\n⏳ Waiting for extension connection...'));
-      await waitForExtensionConnection();
-    }
-
     // In STDIO mode, the process stays alive handling MCP requests
     if (!useMCPWebSocket) {
       logger.info(chalk.gray('\n📡 Listening for MCP requests on stdin...'));
@@ -400,25 +393,6 @@ async function main() {
     process.exit(1);
   }
 }
-
-/**
- * Wait for extension connection (optional)
- */
-async function waitForExtensionConnection(timeout = 60000) {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      logger.warn('⚠️  Extension connection timeout - continuing without extension');
-      resolve(false);
-    }, timeout);
-
-    bridge.once('extension-connected', () => {
-      clearTimeout(timeoutId);
-      logger.info('✅ Extension connected - full functionality available');
-      resolve(true);
-    });
-  });
-}
-
 
 /**
  * Show troubleshooting tips
