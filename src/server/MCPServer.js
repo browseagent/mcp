@@ -53,10 +53,12 @@ export class MCPServer extends EventEmitter {
           logger: this.logger.createChild('STDIO')
         });
       } else {
-        this.transport = new WebSocketTransport({
-          port: this.config.get('mcp_port', 8766),
-          logger: this.logger.createChild('WebSocket')
-        });
+        this.logger.error('Cannot start MCP server with WebSocketTransport.');
+        throw new Error(`Cannot start MCP server with WebSocketTransport.`);
+        // this.transport = new WebSocketTransport({
+        //   port: this.config.get('mcp_port', 8766),
+        //   logger: this.logger.createChild('WebSocket')
+        // });
       }
       
       // Set up transport event handlers
