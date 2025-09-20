@@ -315,6 +315,9 @@ async function main() {
     if (options.port) config.set('port', parseInt(options.port));
     if (options.config) config.loadFromFile(options.config);
 
+    // Validate configuration
+    config.validate();
+
     // Configure logger
     logger.setLevel(config.get('debug') ? 'debug' : 'info');
 
