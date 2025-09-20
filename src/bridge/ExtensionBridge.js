@@ -29,9 +29,13 @@ export class ExtensionBridge extends EventEmitter {
     this.requestId = 0;
     
     // Connection timeout
-    this.connectionTimeout = 30000; // 30 seconds
+    this.connectionTimeout =  options.connectionTimeout || 90000; // 90 seconds
+    this.heartbeatIntervalTime = options.heartbeatInterval || 30000; // 30 seconds
     this.heartbeatInterval = null;
     this.lastHeartbeat = null;
+    this.maxRetries = options.maxRetries || 5;
+
+    this.toolTimeout = options.toolTimeout || 60000; // 60 seconds
 
     this.pendingConnections = new Map();   // Track unvalidated connections
     this.handshakeTimeout = 3000;    // 3 seconds for handshake validation
@@ -78,10 +82,9 @@ export class ExtensionBridge extends EventEmitter {
   }
 
   async startWebSocketServer() {
-    const maxRetries = 5;
     let currentPort = this.port;
     
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    for (let attempt = 0; attempt < this.maxRetries; attempt++) {
       try {
         await this.tryStartServer(currentPort);
         this.port = currentPort; // Update the port if it changed
@@ -96,7 +99,7 @@ export class ExtensionBridge extends EventEmitter {
       }
     }
     
-    throw new Error(`Failed to start WebSocket server after ${maxRetries} attempts. All ports from ${this.port} to ${currentPort - 1} are in use.`);
+    throw new Error(`Failed to start WebSocket server after ${this.maxRetries} attempts. All ports from ${this.port} to ${currentPort - 1} are in use.`);
   }
 
   async tryStartServer(port) {
@@ -353,7 +356,7 @@ export class ExtensionBridge extends EventEmitter {
     this.sendMessage({
       type: 'handshake-response',
       success: true,
-      message: 'Connected to BrowseAgent MCP Server',
+      message: 'Connected to Browseagent MCP Server',
       timestamp: Date.now(),
       serverInfo: {
         name: 'browseagent-mcp',
@@ -604,7 +607,7 @@ export class ExtensionBridge extends EventEmitter {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(requestId);
         reject(new Error(`Tool execution timeout: ${toolName}`));
-      }, 60000); // 60 second timeout
+      }, this.toolTimeout); // 60 second timeout
       
       this.pendingRequests.set(requestId, {
         resolve: (result) => {
@@ -657,12 +660,12 @@ export class ExtensionBridge extends EventEmitter {
         
         // Check if extension is responsive
         const now = Date.now();
-        if (this.lastHeartbeat && (now - this.lastHeartbeat) > 90000) {
-          this.logger.warn('Extension appears unresponsive (no heartbeat for 90s)');
+        if (this.lastHeartbeat && (now - this.lastHeartbeat) > this.connectionTimeout) {
+          this.logger.warn(`Extension appears unresponsive (no heartbeat for ${this.connectionTimeout}ms)`);
           this.emit('extension-unresponsive');
         }
       }
-    }, 30000);
+    }, this.heartbeatIntervalTime);
   }
 
   getStatus() {

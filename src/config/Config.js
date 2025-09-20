@@ -21,7 +21,6 @@ export class Config {
     return {
       // Logging configuration
       debug: false,
-      logLevel: 'info',
       logFile: null,
       
       // Server configuration
@@ -32,37 +31,12 @@ export class Config {
       
       // Extension communication
       heartbeatInterval: 30000,
-      connectionTimeout: 60000,
-      maxRetries: 3,
-      retryDelay: 5000,
-      
+      connectionTimeout: 90000,
+      maxRetries: 5,
+
       // Tool execution
-      toolTimeout: 60000,
-      maxConcurrentTools: 5,
-      screenshotQuality: 0.8,
-      
-      // Security
-      allowedOrigins: [
-        'chrome-extension://*',
-        'ws://localhost:*',
-        'wss://localhost:*'
-      ],
-      maxMessageSize: 10485760, // 10MB
-      
-      // Performance
-      maxMemoryUsage: 536870912, // 512MB
-      gcInterval: 300000, // 5 minutes
-      
-      // Features
-      enableCursor: true,
-      enableSnapshots: true,
-      enableScreenshots: true,
-      enableConsoleCapture: true,
-      
-      // Paths
-      manifestPath: null,
-      tempDir: null,
-      
+      toolTimeout: 120000,
+
       // Environment
       nodeEnv: process.env.NODE_ENV || 'production',
       version: '1.0.0'
@@ -121,25 +95,27 @@ export class Config {
     if (typeof timeout !== 'number' || timeout < 1000) {
       errors.push('Timeout must be a number >= 1000ms');
     }
-    
-    // Validate log level
-    const logLevel = this.get('logLevel');
-    const validLevels = ['error', 'warn', 'info', 'debug'];
-    if (!validLevels.includes(logLevel)) {
-      errors.push(`Log level must be one of: ${validLevels.join(', ')}`);
+
+    const heartbeatInterval = this.get('heartbeatInterval');
+    if (typeof heartbeatInterval !== 'number' || heartbeatInterval < 10000) {
+      errors.push('Heartbeat interval must be a number >= 10000ms');
+    }
+
+    const connectionTimeout = this.get('connectionTimeout');
+    if (typeof connectionTimeout !== 'number' || connectionTimeout < 30000) {
+      errors.push('Connection timeout must be a number >= 30000ms');
+    }
+
+    const maxRetries = this.get('maxRetries');
+    if (typeof maxRetries !== 'number' || maxRetries < 0 || maxRetries > 10) {
+      errors.push('Max retries must be a number between 0 and 10');
+    }
+
+    const toolTimeout = this.get('toolTimeout');
+    if (typeof toolTimeout !== 'number' || toolTimeout < 30000) {
+      errors.push('Tool timeout must be a number >= 30000ms');
     }
     
-    // Validate memory limits
-    const maxMemory = this.get('maxMemoryUsage');
-    if (typeof maxMemory !== 'number' || maxMemory < 67108864) { // 64MB minimum
-      errors.push('Max memory usage must be at least 64MB');
-    }
-    
-    // Validate screenshot quality
-    const quality = this.get('screenshotQuality');
-    if (typeof quality !== 'number' || quality < 0.1 || quality > 1.0) {
-      errors.push('Screenshot quality must be between 0.1 and 1.0');
-    }
     
     if (errors.length > 0) {
       throw new Error(`Configuration validation failed:\n${errors.join('\n')}`);

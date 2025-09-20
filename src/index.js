@@ -110,6 +110,10 @@ function setupExtensionBridge() {
   bridge = new ExtensionBridge({
     port: config.get('port'),
     debug: config.get('debug'),
+    connectionTimeout: config.get('connectionTimeout'),
+    heartbeatInterval: config.get('heartbeatInterval'),
+    maxRetries: config.get('maxRetries'),
+    toolTimeout: config.get('toolTimeout'),
     useWebSocket: true, // Always enable WebSocket for extension
     logger: logger.createChild('Bridge')
   });
