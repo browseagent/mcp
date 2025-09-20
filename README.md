@@ -4,7 +4,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
 
-> **Browser automation MCP server for MCP clients** - Control web browsers directly through AI applications conversation interface using the Model Context Protocol (MCP).
+
+<p align="center">
+   Control web browsers directly through AI applications conversation interface using the Model Context Protocol (MCP).
+  <br />
+  <a href="https://browseagent.pro"><strong>Website</strong></a> 
+  •
+  <a href="https://docs.browseagent.pro"><strong>Documentation</strong></a>
+  •
+  <a href="https://discord.gg/mt8pGkgUZj"><strong>Community</strong></a>
+</p>
+
 
 ## ✨ Features
 
@@ -12,148 +22,7 @@
 - 📸 **Screenshots & Analysis** - Capture and analyze web pages visually  
 - 🎯 **Smart Element Detection** - AI-powered element identification and interaction
 - 🔄 **Real-time Automation** - Dynamic connection with Chrome extension
-- ⚡ **Zero Configuration** - Works out of the box with Claude, Cursor, Windsurf, VSCode, Aider, Zed Editor and other MCP compatiple clients.
 
-## 🚀 Quick Start
-
-### 1. Configure Claude Desktop
-
-Add this to your Claude Desktop MCP settings:
-
-```json
-{
-  "mcpServers": {
-    "browseagent": {
-      "command": "npx",
-      "args": ["@browseagent/mcp@latest"]
-    }
-  }
-}
-```
-
-### 2. Install Chrome Extension
-
-Install the [Browseagent Chrome Extension](https://chrome.google.com/webstore/detail/browseagent) from the Chrome Web Store.
-
-### 3. Connect & Use
-
-1. **Restart Claude Desktop** after adding the MCP configuration
-2. **Open the extension popup** and click "Connect"  
-3. **Start automating** - try saying: *"Take a screenshot of google.com"*
-
-That's it! 🎉
-
-## 🛠️ Available Tools
-
-| Tool | Description | Example Usage |
-|------|-------------|---------------|
-| `browser_navigate` | Navigate to any URL | *"Go to github.com"* |
-| `browser_click` | Click elements on page | *"Click the search button"* |
-| `browser_type` | Type text into inputs | *"Type 'hello world' in the search box"* |
-| `browser_screenshot` | Capture page screenshots | *"Take a screenshot of this page"* |
-| `browser_snapshot` | Get page structure | *"Analyze this page's layout"* |
-| `browser_hover` | Hover over elements | *"Hover over the menu"* |
-| `browser_drag_drop` | Drag and drop elements | *"Drag the file to the upload area"* |
-| `browser_wait` | Wait/pause execution | *"Wait 3 seconds"* |
-| `browser_press_key` | Press keyboard keys | *"Press Enter"* |
-| `browser_go_back` | Navigate back | *"Go back to the previous page"* |
-| `browser_go_forward` | Navigate forward | *"Go forward one page"* |
-| `browser_get_console_logs` | Get console output | *"Check the console for errors"* |
-
-## 💬 Example Conversations
-
-### Basic Navigation
-```
-You: "Navigate to reddit.com and take a screenshot"
-AI agent: I'll help you navigate to Reddit and take a screenshot.
-
-*[Navigates to reddit.com and captures screenshot]*
-
-Here's the current Reddit homepage. I can see the main feed with various posts...
-```
-
-### Form Automation  
-```
-You: "Go to the contact form and fill it out with my details"
-AI agent: I'll help you fill out the contact form. Let me first take a screenshot to see the form...
-
-*[Takes screenshot, identifies form fields, fills them out]*
-
-I've successfully filled out the contact form with the provided information.
-```
-
-### Page Analysis
-```
-You: "Analyze this e-commerce page for usability issues"
-AI agent: I'll analyze this page for usability. Let me take a screenshot and examine the structure...
-
-*[Captures screenshot and page structure]*
-
-Based on my analysis, I found several usability considerations:
-1. The search bar could be more prominent...
-2. Navigation could be simplified...
-```
-
-## ⚙️ Configuration
-
-### MCP Server Options
-
-You can customize the server behavior:
-
-```json
-{
-  "mcpServers": {
-    "browseagent": {
-      "command": "npx",
-      "args": [
-        "@browseagent/mcp@latest",
-        "--debug",
-        "--port", "8765"
-      ]
-    }
-  }
-}
-```
-
-**Available flags:**
-- `--debug` - Enable detailed logging
-- `--port <number>` - WebSocket port (default: 8765)
-- `--websocket` - Use WebSocket mode for testing
-- `--wait-extension` - Wait for extension before starting
-
-### Chrome Extension Settings
-
-Open the extension popup to:
-- ✅ Check connection status  
-- 🔗 Manually connect/disconnect
-- 🐛 Access debug information
-- 📊 View usage statistics
-
-## 🔧 Troubleshooting
-
-### "Extension not connected"
-1. **Install the Chrome extension** from the Web Store
-2. **Click "Connect"** in the extension popup  
-3. **Restart MCP client** if needed
-
-### "MCP server not found"
-1. **Check Node.js version** - Requires Node.js 18.0.0+
-2. **Verify MCP configuration** in MCP client settings
-3. **Try running manually**: `npx @browseagent/mcp@latest --debug`
-
-### "Tools not working"
-1. **Ensure extension is connected** (check popup)
-2. **Check browser permissions** - Extension needs tab access
-3. **Try refreshing the page** you're automating
-
-### Common Issues
-
-| Issue | Solution |
-|-------|----------|
-| `EACCES` permission error | Run with `sudo` on Linux/macOS |
-| Extension not found | Install from Chrome Web Store |
-| Connection timeout | Check firewall settings |
-| Tools returning errors | Ensure page is fully loaded |
 
 ## 🔒 Security & Privacy
 
@@ -335,21 +204,9 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 ```bash
 # Test WebSocket mode (for extension testing)
 node src/index.js --websocket --debug
-
-# Test dual-mode operation
-node src/index.js --websocket --debug --wait-extension
 ```
 
 #### Advanced Testing Scenarios
-
-##### Performance Testing
-```bash
-# Memory usage monitoring
-node --max-old-space-size=512 src/index.js --debug
-
-# CPU profiling
-node --inspect --inspect-brk src/index.js --debug
-```
 
 ##### Integration Testing
 ```bash
@@ -359,8 +216,6 @@ npm run test:connection -- --port 9999
 # Test with timeout scenarios
 npm run test:debug -- --timeout 5000
 
-# Test error recovery
-npm run test:tools -- --force-errors
 ```
 
 ### Development Tools
@@ -370,18 +225,10 @@ npm run test:tools -- --force-errors
 # Run ESLint
 npm run lint
 
-# Fix auto-fixable issues
-npm run lint -- --fix
 ```
 
 #### Debugging Tools
 ```bash
-# Enable Node.js debugging
-npm run dev -- --inspect
-
-# Debug with breakpoints
-npm run dev -- --inspect-brk
-
 # Verbose logging
 npm run dev -- --debug
 ```
@@ -395,7 +242,7 @@ npm run start
 npm run dev
 
 # Quick development test
-npm run dev -- --websocket --debug --wait-extension
+npm run dev -- --websocket --debug
 ```
 
 ### Testing Best Practices
@@ -421,50 +268,12 @@ nodemon src/index.js -- --websocket --debug
 ```
 
 #### Testing with Real Extension
-1. **Install Chrome extension** in development mode
+1. **Install Chrome extension** 
 2. **Run interactive tool tester**: `npm run test:tool`
 3. **Connect extension** via popup
 4. **Test specific tools** interactively
 5. **Verify results** in browser
 
-### Test Output Examples
-
-#### Successful Connection Test
-```
-🧪 Browseagent MCP Connection Tests
-
-📋 Testing: Server Startup...
-   ✓ Process started successfully
-✅ Server Startup: PASSED
-
-📋 Testing: WebSocket Connection...
-   ✓ WebSocket connected
-✅ WebSocket Connection: PASSED
-
-📊 Test Summary
-✅ Passed: 4
-❌ Failed: 0
-📈 Success Rate: 100%
-
-🎉 All connection tests passed!
-```
-
-#### Tool Validation Results
-```
-🧪 Browseagent MCP Tools Tests
-
-📋 Testing: Tool Registry Loading...
-   ✓ Found 12 tools in registry
-   ✓ All 12 tools have valid structure
-✅ Tool Registry Loading: PASSED
-
-🛠️ Tool Summary:
-📁 NAVIGATION:
-   • browser_navigate: Navigate to a URL in a new or existing tab
-   • browser_go_back: Go back to the previous page
-
-✅ Total: 12 tools ready for use
-```
 
 ### Troubleshooting Development Issues
 
@@ -504,7 +313,6 @@ node src/index.js --debug
 # Package for distribution
 npm pack
 ```
-
 
 
 ## 🤝 Contributing
