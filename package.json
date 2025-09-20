@@ -1,7 +1,7 @@
 {
   "name": "@browseagent/mcp",
   "version": "1.0.0",
-  "description": "Browse Agent MCP Server enables AI applications to take control of your browser.",
+  "description": "Browseagent MCP enables AI applications to take control of your browser.",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
