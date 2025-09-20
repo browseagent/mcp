@@ -4,8 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
 
-
-<p align="center">
+<p align="left">
    Control web browsers directly through AI applications conversation interface using the Model Context Protocol (MCP).
   <br />
   <a href="https://browseagent.pro"><strong>Website</strong></a> 
@@ -22,6 +21,11 @@
 - 📸 **Screenshots & Analysis** - Capture and analyze web pages visually  
 - 🎯 **Smart Element Detection** - AI-powered element identification and interaction
 - 🔄 **Real-time Automation** - Dynamic connection with Chrome extension
+
+
+## 🚀 Quick Start
+
+<a href="https://docs.browseagent.pro"><strong>See Documentation</strong></a>
 
 
 ## 🔒 Security & Privacy
