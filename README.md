@@ -1,4 +1,4 @@
-# BrowseAgent MCP Server
+# Browseagent MCP
 
 [![npm version](https://badge.fury.io/js/%40browseagent%2Fmcp.svg)](https://www.npmjs.com/package/@browseagent/mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -33,7 +33,7 @@ Add this to your Claude Desktop MCP settings:
 
 ### 2. Install Chrome Extension
 
-Install the [BrowseAgent Chrome Extension](https://chrome.google.com/webstore/detail/browseagent) from the Chrome Web Store.
+Install the [Browseagent Chrome Extension](https://chrome.google.com/webstore/detail/browseagent) from the Chrome Web Store.
 
 ### 3. Connect & Use
 
@@ -431,7 +431,7 @@ nodemon src/index.js -- --websocket --debug
 
 #### Successful Connection Test
 ```
-🧪 BrowseAgent MCP Connection Tests
+🧪 Browseagent MCP Connection Tests
 
 📋 Testing: Server Startup...
    ✓ Process started successfully
@@ -451,7 +451,7 @@ nodemon src/index.js -- --websocket --debug
 
 #### Tool Validation Results
 ```
-🧪 BrowseAgent MCP Tools Tests
+🧪 Browseagent MCP Tools Tests
 
 📋 Testing: Tool Registry Loading...
    ✓ Found 12 tools in registry
@@ -585,15 +585,14 @@ src/
 
 ## 📚 Documentation
 
-- 📖 [API Reference](./docs/api.md) 
-- 🔧 [Configuration Guide](./docs/configuration.md)
+- 📖 [Tools Reference](./docs/tools.md) 
 
 ## 🆘 Support
 
 - 🐛 **Bug Reports**: [GitHub Issues](https://github.com/browseagent/mcp/issues)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/browseagent/mcp/discussions)
 - 📧 **Email**: hello@browseagent.pro
-- 🐦 **Twitter**: [@BrowseAgent](https://twitter.com/browseagent)
+- 🐦 **Twitter**: [@Browseagent](https://twitter.com/browseagent)
 
 ## 📄 License
 

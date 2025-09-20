@@ -1,6 +1,6 @@
-# BrowseAgent MCP API Reference
+# Browseagent MCP Tools Reference
 
-> **Complete API documentation for BrowseAgent MCP Server** - Detailed schemas, examples, and usage patterns for all browser automation tools.
+> **Complete Tools documentation for Browseagent MCP Server** - Detailed schemas, examples, and usage patterns for all browser automation tools.
 
 ## 📋 Table of Contents
 
@@ -17,7 +17,7 @@
 
 ## Overview
 
-BrowseAgent MCP Server implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) specification to provide browser automation capabilities to AI applications. All tools follow the MCP tool schema format and return structured responses.
+Browseagent MCP Server implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) specification to provide browser automation capabilities to AI applications. All tools follow the MCP tool schema format and return structured responses.
 
 ### Protocol Details
 
