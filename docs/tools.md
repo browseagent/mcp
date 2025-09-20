@@ -943,7 +943,7 @@ Press a keyboard key or key combination.
 
 ## Support
 
-- 📖 **Full Documentation**: [README.md](../README.md)
+- 📖 **README**: [README.md](../README.md)
 - 🐛 **Bug Reports**: [GitHub Issues](https://github.com/browseagent/mcp/issues)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/browseagent/mcp/discussions)
 - 📧 **Email**: hello@browseagent.pro

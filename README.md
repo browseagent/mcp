@@ -420,8 +420,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**[🌟 Star us on GitHub](https://github.com/browseagent/mcp)** • **[🐦 Follow updates](https://twitter.com/browseagent)** • **[📖 Read docs](./docs/)**
+**[🐦 Follow updates](https://twitter.com/browseagent)** • **[📖 Read docs](https://docs.browseagent.pro)**
 
-Made with ❤️ by the BoostGPT team
+Made with ❤️ by the <a href="https://boostgpt.co">BoostGPT</a> team
 
 </div>
