@@ -313,6 +313,7 @@ async function main() {
     // Override config with command line options
     if (options.debug) config.set('debug', true);
     if (options.port) config.set('port', parseInt(options.port));
+    if (options.config) config.loadFromFile(options.config);
 
     // Configure logger
     logger.setLevel(config.get('debug') ? 'debug' : 'info');

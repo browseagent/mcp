@@ -73,6 +73,17 @@ export class Config {
     current[keys[keys.length - 1]] = value;
   }
 
+  loadFromFile(filePath) {
+    return readFile(filePath, 'utf-8')
+      .then(data => {
+        const parsed = JSON.parse(data);
+        this.merge(parsed);
+      })
+      .catch(err => {
+        throw new Error(`Failed to load config from ${filePath}: ${err.message}`);
+      });
+  }
+
   has(key) {
     return this.get(key) !== undefined;
   }
@@ -123,7 +134,6 @@ export class Config {
     
     return true;
   }
-
 
 
   // Export configuration for debugging
