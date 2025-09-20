@@ -422,6 +422,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **[🐦 Follow updates](https://twitter.com/browseagent)** • **[📖 Read docs](https://docs.browseagent.pro)**
 
-Made with ❤️ by the <a href="https://boostgpt.co">BoostGPT</a> team
+Made with ❤️ by the <a href="https://boostgpt.co" target="_blank">BoostGPT</a> team
 
 </div>
